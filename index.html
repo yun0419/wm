@@ -3689,6 +3689,126 @@ function showPublishMomentModalWithPrefill(prefillText) {
     }
 }
 
+// ==================== 每日状态刷新（零点执行） ====================
+function refreshDailyStatusForAllFriends() {
+    var today = getTodayDateStr();
+    var friends = appData.friends || [];
+    
+    if (!appData.friendStatusCalendars) {
+        appData.friendStatusCalendars = {};
+    }
+    
+    for (var i = 0; i < friends.length; i++) {
+        var friendId = friends[i].id;
+        var space = getCoupleSpace(friendId);
+        
+        if (!space || !space.enabled) continue;
+        
+        if (appData.friendStatusCalendars[friendId] && 
+            appData.friendStatusCalendars[friendId][today]) {
+            continue;
+        }
+        
+        var statusIndex = Math.floor(Math.random() * STATUS_LIST.length);
+        var status = STATUS_LIST[statusIndex];
+        
+        var offset = (Math.random() * 24) - 12;
+        offset = Math.round(offset * 10) / 10;
+        
+        var wish = generateDailyWish(friendId);
+        
+        if (!appData.friendStatusCalendars[friendId]) {
+            appData.friendStatusCalendars[friendId] = {};
+        }
+        appData.friendStatusCalendars[friendId][today] = {
+            status: status,
+            timeOffset: offset,
+            wish: wish,
+            myReply: "",
+            updatedAt: Date.now()
+        };
+    }
+    saveData();
+}
+
+// ==================== 生成每日想说的话 ====================
+function generateDailyWish(friendId) {
+    var allTextItems = [];
+    var includeCategories = ["wordCards", "kaomojis", "emoji", "weather"];
+    
+    for (var ci = 0; ci < includeCategories.length; ci++) {
+        var cat = includeCategories[ci];
+        var groups = appData.lexicon.public[cat] || {};
+        for (var g in groups) {
+            if (groups.hasOwnProperty(g)) {
+                var items = groups[g] || [];
+                for (var i = 0; i < items.length; i++) {
+                    var item = items[i];
+                    if (typeof item === 'string' && !item.startsWith('data:image')) {
+                        allTextItems.push(item);
+                    }
+                }
+            }
+        }
+    }
+    
+    if (friendId) {
+        var priv = getPrivateLexicon(friendId);
+        for (var ci = 0; ci < includeCategories.length; ci++) {
+            var cat = includeCategories[ci];
+            var groups = priv[cat] || {};
+            for (var g in groups) {
+                if (groups.hasOwnProperty(g)) {
+                    var items = groups[g] || [];
+                    for (var i = 0; i < items.length; i++) {
+                        var item = items[i];
+                        if (typeof item === 'string' && !item.startsWith('data:image')) {
+                            allTextItems.push(item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (allTextItems.length === 0) {
+        return "今天想对你说...";
+    }
+    
+    var count = Math.floor(Math.random() * 3) + 1;
+    count = Math.min(count, allTextItems.length);
+    
+    var shuffled = [...allTextItems];
+    for (var i = shuffled.length - 1; i > 0; i--) {
+        var j = Math.floor(Math.random() * (i + 1));
+        var temp = shuffled[i];
+        shuffled[i] = shuffled[j];
+        shuffled[j] = temp;
+    }
+    var selected = shuffled.slice(0, count);
+    
+    return selected.join(" ");
+}
+
+// ==================== 获取好友当天的状态数据 ====================
+function getFriendTodayStatus(friendId) {
+    var today = getTodayDateStr();
+    if (!appData.friendStatusCalendars) {
+        appData.friendStatusCalendars = {};
+    }
+    if (!appData.friendStatusCalendars[friendId]) {
+        appData.friendStatusCalendars[friendId] = {};
+    }
+    return appData.friendStatusCalendars[friendId][today] || null;
+}
+
+// ==================== 获取好友某天的状态数据 ====================
+function getFriendStatusByDate(friendId, dateStr) {
+    if (!appData.friendStatusCalendars) return null;
+    if (!appData.friendStatusCalendars[friendId]) return null;
+    return appData.friendStatusCalendars[friendId][dateStr] || null;
+}
+
 // ===== 新增：执行每天零点的提醒检查 =====
 function checkMidnightReminders() {
     let today = getTodayDateStr();
@@ -3799,6 +3919,7 @@ function loadData() {
                 if (!appData.votes) appData.votes = {};
                 if (!appData.questionnaires) appData.questionnaires = {};
                 if (!appData.calendarEvents) appData.calendarEvents = {};
+                if (!appData.friendStatusCalendars) appData.friendStatusCalendars = {};
                 
                 // ===== questionBank 初始化 =====
                 if (!appData.questionBank || typeof appData.questionBank !== 'object') {
@@ -5544,17 +5665,20 @@ function showCoupleSpaceModal(friendId) {
             </div>
             <div style="display: flex; flex-direction: column; gap: 8px; text-align: left;">
                 <div class="settings-item" data-sub="we" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
-                    我们
-                </div>
-                <div class="settings-item" data-sub="hisThought" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
-                    他的想法
-                </div>
-                <div class="settings-item" data-sub="memories" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500; position: relative;">
-                    我们的回忆 ${redDotHtml}
-                </div>
-                <div class="settings-item" data-sub="imageCSS" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
-                    图片样式
-                </div>
+    我们
+</div>
+<div class="settings-item" data-sub="statusCalendar" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
+    📅 状态日历
+</div>
+<div class="settings-item" data-sub="hisThought" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
+    他的想法
+</div>
+<div class="settings-item" data-sub="memories" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500; position: relative;">
+    我们的回忆 ${redDotHtml}
+</div>
+<div class="settings-item" data-sub="imageCSS" style="padding: 10px 14px; border-radius: 8px; background: #f8f8fa; border-bottom: none; justify-content: center; font-weight: 500;">
+    图片样式
+</div>
             </div>
         </div>
     `;
@@ -5585,6 +5709,8 @@ function showCoupleSpaceModal(friendId) {
             modal.remove();
             if (sub === "we") {
                 showWeModal(friendId);
+                } else if (sub === "statusCalendar") {
+    showStatusCalendarModal(friendId);
             } else if (sub === "hisThought") {
                 triggerHisThought(friendId);
             } else if (sub === "memories") {
@@ -6291,6 +6417,288 @@ function scheduleMemoryCommentReply(friendId, memoryId) {
         // 检查是否有打开的情侣空间回忆弹窗
         renderCurrentPage();
     }, delayMs);
+}
+
+// ==================== 状态日历弹窗 ====================
+function showStatusCalendarModal(friendId) {
+    var friend = appData.friends.find(function(f) { return f.id === friendId; });
+    if (!friend) return;
+    
+    var space = getCoupleSpace(friendId);
+    var nickname = space.nickname || friend.name;
+    var today = getTodayDateStr();
+    
+    // 确保今天有记录
+    refreshDailyStatusForAllFriends();
+    
+    // 获取该好友所有状态记录
+    var records = appData.friendStatusCalendars[friendId] || {};
+    var dates = Object.keys(records).sort();
+    
+    // 生成状态日历HTML
+    var modalHtml = '<div class="full-page-modal" style="height:100%;display:flex;flex-direction:column;background:var(--app-bg-color);">';
+    modalHtml += '<div style="padding:10px 14px;border-bottom:0.5px solid #e9e9ef;display:flex;justify-content:space-between;align-items:center;flex-shrink:0;">';
+    modalHtml += '<span id="closeStatusCalendar" style="cursor:pointer;font-size:18px;color:#ff3b30;">✕ 关闭</span>';
+    modalHtml += '<span style="font-weight:600;font-size:15px;">📅 ' + escapeHtml(nickname) + ' 的状态日历</span>';
+    modalHtml += '<span id="backToCoupleSpaceFromStatus" style="cursor:pointer;font-size:14px;color:#07c160;">← 返回</span>';
+    modalHtml += '</div>';
+    
+    // 当前月份
+    var now = new Date();
+    var currentYear = now.getFullYear();
+    var currentMonth = now.getMonth();
+    
+    function renderCalendar(y, m) {
+        var firstDay = new Date(y, m, 1).getDay();
+        var daysInMonth = new Date(y, m + 1, 0).getDate();
+        var todayStr = getTodayDateStr();
+        var monthStr = y + '-' + String(m + 1).padStart(2, '0');
+        
+        var html = '<div class="calendar-container" style="padding:12px;">';
+        html += '<div class="calendar-header" style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px;">';
+        html += '<button id="statusPrevMonth" style="background:#888;padding:4px 12px;border:none;color:white;border-radius:12px;">◀</button>';
+        html += '<span style="font-weight:600;font-size:16px;">' + y + '年' + (m + 1) + '月</span>';
+        html += '<button id="statusNextMonth" style="background:#888;padding:4px 12px;border:none;color:white;border-radius:12px;">▶</button>';
+        html += '</div>';
+        html += '<div class="calendar-weekdays" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:6px;">';
+var weekdays = ["日","一","二","三","四","五","六"];
+for (var wd = 0; wd < weekdays.length; wd++) {
+    html += '<div class="calendar-weekday" style="font-weight:bold;color:#8e8e93;font-size:12px;text-align:center;">' + weekdays[wd] + '</div>';
+}
+html += '</div>';
+        html += '<div class="calendar-days" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;">';
+        
+        for (var i = 0; i < firstDay; i++) {
+            html += '<div style="padding:6px 2px;text-align:center;"></div>';
+        }
+        
+        for (var d = 1; d <= daysInMonth; d++) {
+            var dateStr = y + '-' + String(m + 1).padStart(2, '0') + '-' + String(d).padStart(2, '0');
+            var hasRecord = records[dateStr] ? true : false;
+            var isToday = (dateStr === todayStr);
+            var isPast = dateStr < todayStr;
+            
+                    var dayClass = "calendar-day";
+        if (isToday) dayClass += " today";
+        
+        var dotHtml = hasRecord ? '<div style="width:6px;height:6px;border-radius:50%;background:#07c160;margin:1px auto 0;"></div>' : '';
+        
+        html += '<div class="' + dayClass + '" data-date="' + dateStr + '" style="padding:6px 2px;text-align:center;cursor:pointer;border-radius:6px;font-size:12px;transition:background 0.2s;' + 
+(isToday ? 'background:#ff9500;color:white;' : '') + 
+'">' + d + dotHtml + '</div>';
+        }
+        html += '</div></div>';
+        return html;
+    }
+    
+    modalHtml += '<div id="statusCalendarContainer" style="flex:1;overflow-y:auto;">' + renderCalendar(currentYear, currentMonth) + '</div>';
+    modalHtml += '</div>';
+    
+    var modal = showModal(modalHtml, true);
+    var container = modal.querySelector('.modal-container');
+    if (container) container.classList.add('full-page-modal');
+    
+    // 关闭
+    var closeBtn = modal.querySelector('#closeStatusCalendar');
+    if (closeBtn) closeBtn.onclick = function() { modal.remove(); };
+    
+    // 返回情侣空间
+    var backBtn = modal.querySelector('#backToCoupleSpaceFromStatus');
+    if (backBtn) {
+        backBtn.onclick = function() {
+            modal.remove();
+            showCoupleSpaceModal(friendId);
+        };
+    }
+    
+    // 日历切换月份
+    var calendarContainer = modal.querySelector('#statusCalendarContainer');
+    
+    // 点击日期查看详情
+    calendarContainer.addEventListener('click', function(e) {
+        var dayEl = e.target.closest('.calendar-day');
+        if (!dayEl) return;
+        var dateStr = dayEl.dataset.date;
+        if (!dateStr) return;
+        showStatusDetailModal(friendId, dateStr, modal);
+    });
+    
+    // 月份切换
+    var prevBtn = modal.querySelector('#statusPrevMonth');
+    var nextBtn = modal.querySelector('#statusNextMonth');
+    if (prevBtn) {
+        prevBtn.onclick = function() {
+            currentMonth--;
+            if (currentMonth < 0) { currentMonth = 11; currentYear--; }
+            calendarContainer.innerHTML = renderCalendar(currentYear, currentMonth);
+            reattachDayEvents(modal, friendId);
+        };
+    }
+    if (nextBtn) {
+        nextBtn.onclick = function() {
+            currentMonth++;
+            if (currentMonth > 11) { currentMonth = 0; currentYear++; }
+            calendarContainer.innerHTML = renderCalendar(currentYear, currentMonth);
+            reattachDayEvents(modal, friendId);
+        };
+    }
+}
+
+// ==================== 状态详情弹窗 ====================
+function showStatusDetailModal(friendId, dateStr, parentModal) {
+    var friend = appData.friends.find(function(f) { return f.id === friendId; });
+    if (!friend) return;
+    
+    var space = getCoupleSpace(friendId);
+    var nickname = space.nickname || friend.name;
+    
+    var record = getFriendStatusByDate(friendId, dateStr);
+    var isToday = (dateStr === getTodayDateStr());
+    var isFuture = dateStr > getTodayDateStr();
+    
+    var modalHtml = '<div class="modal-container" style="width:90%;max-width:400px;padding:16px;border-radius:16px;">';
+    modalHtml += '<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:12px;">';
+modalHtml += '<span id="backFromStatusDetail" style="cursor:pointer;font-size:18px;color:#07c160;">← 返回</span>';
+modalHtml += '<span style="font-weight:600;font-size:15px;">📅 ' + dateStr + '</span>';
+modalHtml += '<span style="width:24px;"></span>';
+modalHtml += '</div>';
+    
+    if (isFuture) {
+        modalHtml += '<div style="text-align:center;padding:30px;color:#8e8e93;">🔮 未来的日子，等待解锁...</div>';
+    } else if (!record) {
+        modalHtml += '<div style="text-align:center;padding:30px;color:#8e8e93;">📭 这天还没有记录</div>';
+    } else {
+        var statusEmoji = getStatusEmoji(record.status);
+        var timeDisplay = formatTimeWithOffset(record.timeOffset);
+        
+        modalHtml += '<div style="background:#f8f8fa;border-radius:10px;padding:14px;margin-bottom:12px;">';
+modalHtml += '<div style="display:flex;align-items:center;gap:8px;margin-bottom:6px;">';
+modalHtml += '<span style="font-size:16px;font-weight:500;">' + escapeHtml(record.status) + '</span>';
+modalHtml += '</div>';
+modalHtml += '<div style="font-size:13px;color:#888;">' + timeDisplay + '</div>';
+modalHtml += '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid #e9e9ef;">';
+modalHtml += '<div style="font-size:12px;color:#888;">想说的话</div>';
+modalHtml += '<div style="font-size:14px;margin-top:3px;">' + escapeHtml(record.wish || '') + '</div>';
+modalHtml += '</div>';
+if (record.myReply) {
+    modalHtml += '<div style="margin-top:8px;padding-top:8px;border-top:0.5px solid #e9e9ef;">';
+    modalHtml += '<div style="font-size:12px;color:#07c160;">我的回复</div>';
+    modalHtml += '<div style="font-size:14px;margin-top:3px;">' + escapeHtml(record.myReply) + '</div>';
+    modalHtml += '</div>';
+}
+modalHtml += '</div>';
+        
+        // 只有今天或过去的日子才能回复
+        if (!isFuture) {
+            modalHtml += '<div style="display:flex;gap:6px;margin-top:6px;">';
+            modalHtml += '<input type="text" id="statusReplyInput" placeholder="写回复..." value="' + escapeHtml(record.myReply || '') + '" style="flex:1;padding:8px 12px;border-radius:20px;border:0.5px solid #ddd;font-size:13px;">';
+            modalHtml += '<button id="statusReplyBtn" style="background:#07c160;padding:6px 16px;border:none;color:white;border-radius:20px;">回复</button>';
+            modalHtml += '</div>';
+        }
+    }
+    modalHtml += '</div>';
+    
+    var modal = showModal(modalHtml);
+    
+    var backBtn = modal.querySelector('#backFromStatusDetail');
+    if (backBtn) {
+        backBtn.onclick = function() {
+            modal.remove();
+            if (parentModal) {
+                // 刷新父日历
+            }
+        };
+    }
+    
+    var replyBtn = modal.querySelector('#statusReplyBtn');
+    if (replyBtn) {
+        replyBtn.onclick = function() {
+            var input = modal.querySelector('#statusReplyInput');
+            var reply = input.value.trim();
+            if (!reply) { alert('请输入回复内容'); return; }
+            
+            if (!appData.friendStatusCalendars[friendId]) {
+                appData.friendStatusCalendars[friendId] = {};
+            }
+            if (!appData.friendStatusCalendars[friendId][dateStr]) {
+                appData.friendStatusCalendars[friendId][dateStr] = {
+                    status: '悠闲中',
+                    timeOffset: 0,
+                    wish: '',
+                    myReply: '',
+                    updatedAt: Date.now()
+                };
+            }
+            appData.friendStatusCalendars[friendId][dateStr].myReply = reply;
+            appData.friendStatusCalendars[friendId][dateStr].updatedAt = Date.now();
+            saveData();
+            modal.remove();
+            if (parentModal) {
+                // 刷新父日历
+                var container = parentModal.querySelector('#statusCalendarContainer');
+                if (container) {
+                    // 重新渲染当前月份
+                    var yearMatch = container.innerHTML.match(/(\d{4})年/);
+                    var monthMatch = container.innerHTML.match(/(\d+)月/);
+                    if (yearMatch && monthMatch) {
+                        var y = parseInt(yearMatch[1]);
+                        var m = parseInt(monthMatch[1]) - 1;
+                        // 简单刷新：重新打开日历
+                        parentModal.remove();
+                        showStatusCalendarModal(friendId);
+                    }
+                }
+            }
+            alert('✅ 回复已保存');
+        };
+    }
+}
+
+// ==================== 获取状态对应的emoji ====================
+function getStatusEmoji(status) {
+    var emojiMap = {
+        '崩溃': '💔', '透支': '😰', '焦灼': '🔥', '高压': '💪', '繁忙': '📋',
+        '紧张': '😬', '连轴转': '🌀', '马不停蹄': '🏃', '忙碌': '📦', '赶工': '⏰',
+        '冲刺': '🚀', '专注': '🎯', '投入': '💫', '思考': '🤔', '学习': '📚',
+        '阅读': '📖', '创作': '✍️', '交接': '📤', '收尾': '✅', '待机': '💤',
+        '放空': '🌌', '发呆': '😶', '从容': '😌', '稳妥': '🛡️', '有序': '📊',
+        '轻快': '🎵', '松散': '🍃', '零碎': '🧩', '休息': '🛋️', '小憩': '😴',
+        '放松': '🧘', '悠闲': '🌅', '惬意': '☕', '享受': '🎶', '宁静': '🌙',
+        '自在': '🕊️', '慵懒': '🐱', '轻松': '🌿', '清闲': '🌸', '安逸': '🏖️',
+        '悠然': '🎐', '恬淡': '🍵', '空闲': '🌻', '静止': '⏸️', '虚无': '🌫️'
+    };
+    return emojiMap[status] || '😊';
+}
+
+// ==================== 格式化时差时间 ====================
+function formatTimeWithOffset(offset) {
+    var now = new Date();
+    var hours = now.getHours();
+    var minutes = now.getMinutes();
+    
+    var totalMinutes = hours * 60 + minutes + Math.round(offset * 60);
+    while (totalMinutes < 0) totalMinutes += 24 * 60;
+    while (totalMinutes >= 24 * 60) totalMinutes -= 24 * 60;
+    
+    var newHours = Math.floor(totalMinutes / 60);
+    var newMinutes = totalMinutes % 60;
+    
+    var offsetStr = offset >= 0 ? '+' + offset.toFixed(1) : offset.toFixed(1);
+    return String(newHours).padStart(2, '0') + ':' + String(newMinutes).padStart(2, '0') + ' (' + offsetStr + 'h)';
+}
+
+// ==================== 重新绑定日历点击事件 ====================
+function reattachDayEvents(modal, friendId) {
+    var container = modal.querySelector('#statusCalendarContainer');
+    if (!container) return;
+    
+    container.addEventListener('click', function(e) {
+        var dayEl = e.target.closest('.calendar-day');
+        if (!dayEl) return;
+        var dateStr = dayEl.dataset.date;
+        if (!dateStr) return;
+        showStatusDetailModal(friendId, dateStr, modal);
+    });
 }
 
 // ==================== 图片样式CSS ====================
@@ -12842,6 +13250,40 @@ if (hasNewMine) {
     }
 }
 
+// ===== 渲染聊天窗口状态栏 =====
+function renderChatStatusBar(chatWin, sessionId) {
+    var session = appData.sessions.find(function(s) { return s.sessionId === sessionId; });
+    if (!session || session.type !== 'friend') {
+        var bar = chatWin.querySelector('#chatStatusBar');
+        if (bar) bar.textContent = '';
+        return;
+    }
+    
+    var friendId = session.targetId;
+    var space = getCoupleSpace(friendId);
+    var bar = chatWin.querySelector('#chatStatusBar');
+    if (!bar) return;
+    
+    // 如果情侣空间未开启，清空状态栏
+    if (!space.enabled) {
+        bar.textContent = '';
+        return;
+    }
+    
+    // 获取今天的状态数据
+    var todayData = getFriendTodayStatus(friendId);
+    if (!todayData) {
+        bar.textContent = '';
+        return;
+    }
+    
+    var status = todayData.status || '悠闲中';
+    var offset = todayData.timeOffset || 0;
+    var timeDisplay = formatTimeWithOffset(offset);
+    
+    bar.textContent = status + ' · ' + timeDisplay;
+}
+
 // ===== 新增：渲染聊天横幅 =====
 function renderChatBanner(chatWin, sessionId) {
     let session = appData.sessions.find(s => s.sessionId === sessionId);
@@ -13490,18 +13932,23 @@ if (frameId && frameId !== 'frame_default') {
     frameId = getDefaultAvatarFrame();
 }
 let headerAvatarHtml = renderAvatarWithFrame(session.avatar, frameId, 32);
-    chatWin.innerHTML = `
-    <div class="chat-header">
-        <span class="back-btn">←</span>
-        <div class="avatar-small" id="chatHeaderAvatar">${headerAvatarHtml}</div>
-        <div class="chat-name" id="chatHeaderName">${escapeHtml(session.name)}</div>
-        <div style="flex:1"></div>
+chatWin.innerHTML = `
+<div class="chat-header" style="display:flex; align-items:center; flex-wrap:wrap; padding:8px 14px;">
+    <span class="back-btn">←</span>
+    <div style="display:flex; align-items:center; gap:8px; flex:1; min-width:0;">
+        <div class="avatar-small" id="chatHeaderAvatar" style="flex-shrink:0;">${headerAvatarHtml}</div>
+        <div style="display:flex; flex-direction:column; min-width:0;">
+            <div class="chat-name" id="chatHeaderName" style="font-weight:600; font-size:16px; cursor:pointer; line-height:1.3;">${escapeHtml(session.name)}</div>
+            <div id="chatStatusBar" style="font-size:11px; color:#8e8e93; line-height:1.3; min-height:16px;"></div>
+        </div>
     </div>
-    <!-- ===== 恋爱横幅 ===== -->
-    <div id="chatBanner" style="display:none; background: #f5f0eb; padding: 2px 12px; text-align: center; font-size: 11px; font-weight: 400; color: #5a4a3a; border-bottom: 0.5px solid rgba(180,160,140,0.15); flex-shrink: 0; min-height: 20px; line-height: 20px; box-shadow: inset 0 0 30px rgba(200,180,160,0.15);">
-        💞
-    </div>
-    <div class="messages-container"></div>
+    <div style="flex:0 0 24px;"></div>
+</div>
+<!-- ===== 恋爱横幅 ===== -->
+<div id="chatBanner" style="display:none; background: #f5f0eb; padding: 2px 12px; text-align: center; font-size: 11px; font-weight: 400; color: #5a4a3a; border-bottom: 0.5px solid rgba(180,160,140,0.15); flex-shrink: 0; min-height: 20px; line-height: 20px; box-shadow: inset 0 0 30px rgba(200,180,160,0.15);">
+    💞
+</div>
+<div class="messages-container"></div>
     <div class="typing-status" style="display:none;">对方正在输入...</div>
         <div class="input-area">
             <div class="input-icons">
@@ -13538,6 +13985,8 @@ let headerAvatarHtml = renderAvatarWithFrame(session.avatar, frameId, 32);
     }
     
     renderChatMessagesToWindow(chatWin, session.sessionId);
+    // ===== 渲染状态栏 =====
+renderChatStatusBar(chatWin, session.sessionId);
     // ===== 渲染恋爱横幅 =====
 renderChatBanner(chatWin, session.sessionId);
 let containerMsg = chatWin.querySelector(".messages-container");
@@ -16609,6 +17058,15 @@ function attachDynamicEvents() {
         }
     }
 }
+
+// ==================== 状态列表（45个，从崩溃到虚无） ====================
+const STATUS_LIST = [
+    "崩溃", "透支", "焦灼", "高压", "繁忙", "紧张", "连轴转", "马不停蹄", "忙碌", "赶工",
+    "冲刺", "专注", "投入", "思考", "学习", "阅读", "创作", "交接", "收尾", "待机",
+    "放空", "发呆", "从容", "稳妥", "有序", "轻快", "松散", "零碎", "休息", "小憩",
+    "放松", "悠闲", "惬意", "享受", "宁静", "自在", "慵懒", "轻松", "清闲", "安逸",
+    "悠然", "恬淡", "空闲", "静止", "虚无"
+];
 
 // ==================== 初始化 ====================
 function init() {
