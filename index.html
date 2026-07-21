@@ -251,7 +251,7 @@ body, .app, .page, .settings-item, button, input, textarea, .bubble, .moment-con
     margin-bottom: 10px;
 }
 .message {
-    max-width: 85%;
+    max-width: 100%;
     display: flex;
     align-items: flex-start;
     gap: 6px;
@@ -283,7 +283,8 @@ body, .app, .page, .settings-item, button, input, textarea, .bubble, .moment-con
     font-size: 12px !important;
     padding: 5px 14px !important;
     border-radius: 20px !important;
-    white-space: nowrap !important;
+    white-space: pre-wrap !important;
+    word-break: break-word !important;
     display: inline-block;
     width: auto;
     max-width: none !important;
@@ -7257,10 +7258,11 @@ function showPrivateLexiconModal(friendId) {
                 }
             }
             setTimeout(() => {
-                saveCurrentItems(items);
-                renderModal(modalRef);
-                alert(`成功添加 ${added} 张图片`);
-            }, 500);
+    saveCurrentItems(items);
+    searchKeyword = "";
+    renderModal(modalRef);
+    alert(`成功添加 ${added} 张图片`);
+}, 500);
         };
         input.click();
     }
@@ -7285,17 +7287,18 @@ function showPrivateLexiconModal(friendId) {
         let cancelBtn = inputModal.querySelector("#cancelSingleBtn");
         
         if (confirmBtn) {
-            confirmBtn.onclick = () => {
-                let val = inputField.value.trim();
-                if (!val) { alert("请输入内容"); return; }
-                let items = getCurrentItems();
-                if (items.includes(val)) { alert("词条已存在"); return; }
-                items.push(val);
-                saveCurrentItems(items);
-                inputModal.remove();
-                renderModal(modalRef);
-            };
-        }
+    confirmBtn.onclick = () => {
+        let val = inputField.value.trim();
+        if (!val) { alert("请输入内容"); return; }
+        let items = getCurrentItems();
+        if (items.includes(val)) { alert("词条已存在"); return; }
+        items.push(val);
+        saveCurrentItems(items);
+        inputModal.remove();
+        searchKeyword = "";
+        renderModal(modalRef);
+    };
+}
         if (cancelBtn) {
             cancelBtn.onclick = () => inputModal.remove();
         }
@@ -7319,26 +7322,27 @@ function showPrivateLexiconModal(friendId) {
         let cancelBtn = batchModal.querySelector("#cancelBatchBtn");
         
         if (confirmBtn) {
-            confirmBtn.onclick = () => {
-                let text = textarea.value.trim();
-                if (!text) { alert("请输入内容"); return; }
-                let items = getCurrentItems();
-                let lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-                let newLines = [];
-                for (let line of lines) {
-                    if (!items.includes(line) && !newLines.includes(line)) {
-                        newLines.push(line);
-                    }
-                }
-                if (newLines.length) {
-                    items.push(...newLines);
-                    saveCurrentItems(items);
-                }
-                batchModal.remove();
-                renderModal(modalRef);
-                alert(`成功添加 ${newLines.length} 个词条（重复 ${lines.length - newLines.length} 个）`);
-            };
+    confirmBtn.onclick = () => {
+        let text = textarea.value.trim();
+        if (!text) { alert("请输入内容"); return; }
+        let items = getCurrentItems();
+        let lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+        let newLines = [];
+        for (let line of lines) {
+            if (!items.includes(line) && !newLines.includes(line)) {
+                newLines.push(line);
+            }
         }
+        if (newLines.length) {
+            items.push(...newLines);
+            saveCurrentItems(items);
+        }
+        batchModal.remove();
+        searchKeyword = "";
+        renderModal(modalRef);
+        alert(`成功添加 ${newLines.length} 个词条（重复 ${lines.length - newLines.length} 个）`);
+    };
+}
         if (cancelBtn) {
             cancelBtn.onclick = () => batchModal.remove();
         }
@@ -7549,12 +7553,22 @@ for (let gName of groupNames) {
         }
         
         let searchInput = container.querySelector("#searchInput");
-        if (searchInput) {
-            searchInput.oninput = (e) => {
-                searchKeyword = e.target.value;
-                renderModal(modal);
-            };
-        }
+if (searchInput) {
+    let searchTimer = null;
+    searchInput.oninput = (e) => {
+        searchKeyword = e.target.value;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            renderModal(modal);
+            // 重新聚焦搜索框，保持键盘不消失
+            let newInput = modal.querySelector('#searchInput');
+            if (newInput) {
+                newInput.focus();
+                newInput.setSelectionRange(searchKeyword.length, searchKeyword.length);
+            }
+        }, 300);
+    };
+}
         
         let catSpans = container.querySelectorAll("[data-cat]");
         for (let el of catSpans) {
@@ -8661,6 +8675,23 @@ function sendPatMessage(sessionId, fromSelf = true) {
         friendId = session.targetId;
     }
     let patText = getRandomPatMessage(fromSelf, friendId);
+    
+    // 如果拍一拍文本超过18个字符，强制换行
+    if (patText.length > 20) {
+        let mid = Math.floor(patText.length / 2);
+        let breakPos = patText.lastIndexOf('🤍', mid);
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = patText.lastIndexOf('❤️', mid);
+        }
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = patText.lastIndexOf('💕', mid);
+        }
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = mid;
+        }
+        patText = patText.substring(0, breakPos + 1) + '\n' + patText.substring(breakPos + 1);
+    }
+    
     sendMessage(sessionId, patText, fromSelf, null, true);
 }
 
@@ -8673,7 +8704,22 @@ function sendPatMessageWithSender(sessionId, fromSelf = true, senderInfo = null)
     }
     let patText = getRandomPatMessage(fromSelf, friendId);
     
-    // 如果是群聊且指定了发送者信息，使用 senderInfo
+    // 如果拍一拍文本超过18个字符，强制换行
+    if (patText.length > 20) {
+        let mid = Math.floor(patText.length / 2);
+        let breakPos = patText.lastIndexOf('🤍', mid);
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = patText.lastIndexOf('❤️', mid);
+        }
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = patText.lastIndexOf('💕', mid);
+        }
+        if (breakPos === -1 || breakPos < 4) {
+            breakPos = mid;
+        }
+        patText = patText.substring(0, breakPos + 1) + '\n' + patText.substring(breakPos + 1);
+    }
+    
     if (session && session.type === "group" && senderInfo) {
         sendMessage(sessionId, patText, false, senderInfo, true);
     } else {
@@ -16144,10 +16190,11 @@ function openLexiconModal() {
                 }
             }
             setTimeout(() => {
-                saveCurrentItems(items);
-                renderModal(modalRef);
-                alert(`成功添加 ${added} 张图片`);
-            }, 500);
+    saveCurrentItems(items);
+    searchKeyword = "";
+    renderModal(modalRef);
+    alert(`成功添加 ${added} 张图片`);
+}, 500);
         };
         input.click();
     }
@@ -16173,17 +16220,18 @@ function openLexiconModal() {
         let cancelBtn = inputModal.querySelector("#cancelSingleBtn");
         
         if (confirmBtn) {
-            confirmBtn.onclick = () => {
-                let val = inputField.value.trim();
-                if (!val) { alert("请输入内容"); return; }
-                let items = getCurrentItems();
-                if (items.includes(val)) { alert("词条已存在"); return; }
-                items.push(val);
-                saveCurrentItems(items);
-                inputModal.remove();
-                renderModal(modalRef);
-            };
-        }
+    confirmBtn.onclick = () => {
+        let val = inputField.value.trim();
+        if (!val) { alert("请输入内容"); return; }
+        let items = getCurrentItems();
+        if (items.includes(val)) { alert("词条已存在"); return; }
+        items.push(val);
+        saveCurrentItems(items);
+        inputModal.remove();
+        searchKeyword = "";
+        renderModal(modalRef);
+    };
+}
         if (cancelBtn) {
             cancelBtn.onclick = () => inputModal.remove();
         }
@@ -16208,26 +16256,27 @@ function openLexiconModal() {
         let cancelBtn = batchModal.querySelector("#cancelBatchBtn");
         
         if (confirmBtn) {
-            confirmBtn.onclick = () => {
-                let text = textarea.value.trim();
-                if (!text) { alert("请输入内容"); return; }
-                let items = getCurrentItems();
-                let lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
-                let newLines = [];
-                for (let line of lines) {
-                    if (!items.includes(line) && !newLines.includes(line)) {
-                        newLines.push(line);
-                    }
-                }
-                if (newLines.length) {
-                    items.push(...newLines);
-                    saveCurrentItems(items);
-                }
-                batchModal.remove();
-                renderModal(modalRef);
-                alert(`成功添加 ${newLines.length} 个词条（重复 ${lines.length - newLines.length} 个）`);
-            };
+    confirmBtn.onclick = () => {
+        let text = textarea.value.trim();
+        if (!text) { alert("请输入内容"); return; }
+        let items = getCurrentItems();
+        let lines = text.split(/\r?\n/).filter(line => line.trim().length > 0);
+        let newLines = [];
+        for (let line of lines) {
+            if (!items.includes(line) && !newLines.includes(line)) {
+                newLines.push(line);
+            }
         }
+        if (newLines.length) {
+            items.push(...newLines);
+            saveCurrentItems(items);
+        }
+        batchModal.remove();
+        searchKeyword = "";
+        renderModal(modalRef);
+        alert(`成功添加 ${newLines.length} 个词条（重复 ${lines.length - newLines.length} 个）`);
+    };
+}
         if (cancelBtn) {
             cancelBtn.onclick = () => batchModal.remove();
         }
@@ -16439,12 +16488,22 @@ groupNames.forEach(gName => {
         }
         
         let searchInput = container.querySelector("#searchInput");
-        if (searchInput) {
-            searchInput.oninput = (e) => {
-                searchKeyword = e.target.value;
-                renderModal(modal);
-            };
-        }
+if (searchInput) {
+    let searchTimer = null;
+    searchInput.oninput = (e) => {
+        searchKeyword = e.target.value;
+        if (searchTimer) clearTimeout(searchTimer);
+        searchTimer = setTimeout(() => {
+            renderModal(modal);
+            // 重新聚焦搜索框，保持键盘不消失
+            let newInput = modal.querySelector('#searchInput');
+            if (newInput) {
+                newInput.focus();
+                newInput.setSelectionRange(searchKeyword.length, searchKeyword.length);
+            }
+        }, 300);
+    };
+}
         
         container.querySelectorAll("[data-cat]").forEach(el => {
             el.onclick = () => {
