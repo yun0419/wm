@@ -1782,13 +1782,9 @@ coupleSpaces: {},  // { friendId: { enabled: true, startDate: "2026-06-26", nick
     friendBirthdayRedDot: {},
 friendAnniversaryRedDot: {},
     votes: {},
-    friendBirthdayRedDot: {},
-friendAnniversaryRedDot: {},
     questionnaires: {},  // ✅ 新增：存储问卷数据 { questionnaireId: { ... } }
-    globalTheme: {
-    friendBirthdayRedDot: {},
-friendAnniversaryRedDot: {},
-        bgColor: "#ffffff",
+globalTheme: {
+    bgColor: "#ffffff",
         bgImage: null,
         fontFamily: "",
         fontSize: 14,
@@ -1821,6 +1817,10 @@ let currentBottomPanel = null;
 let letterCheckIntervalId = null;
 let currentReplyingTo = null;
 let consecutiveReplyQueues = {};
+// 对方主动发消息定时器
+let autoMessageIntervalId = null;
+// 桌面通知权限
+let desktopNotificationPermission = false;
 
 // ==================== 辅助函数 ====================
 function saveData() {
@@ -1913,6 +1913,207 @@ function autoCleanOldMessages() {
 function getTodayDateStr() {
     let today = new Date();
     return `${today.getFullYear()}-${String(today.getMonth()+1).padStart(2,'0')}-${String(today.getDate()).padStart(2,'0')}`;
+}
+
+// 计算发送概率：距离上次聊天越久概率越大，24小时100%
+function getSendProbability(lastChatTime) {
+    if (!lastChatTime) return 100;
+    let now = Date.now();
+    let diffMs = now - lastChatTime;
+    let diffHours = diffMs / (1000 * 60 * 60);
+    
+    if (diffHours >= 24) return 100;
+    if (diffHours >= 18) return 80;
+    if (diffHours >= 12) return 60;
+    if (diffHours >= 6) return 40;
+    if (diffHours >= 3) return 20;
+    if (diffHours >= 1) return 8;
+    return 2;
+}
+
+// 从公共词条库 + 私人词条库随机取 1-3 条组合
+function generateAutoMessage(friendId) {
+    let allItems = [];
+    let categories = ["wordCards", "kaomojis", "emoji", "weather", "status"];
+    
+    // 从公共词条库收集
+    for (let cat of categories) {
+        let groups = appData.lexicon.public[cat] || {};
+        for (let g in groups) {
+            if (Array.isArray(groups[g])) {
+                for (let item of groups[g]) {
+                    if (typeof item === 'string' && !item.startsWith('data:image')) {
+                        allItems.push(item);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 从该好友的私人词条库收集
+    if (friendId) {
+        let priv = getPrivateLexicon(friendId);
+        for (let cat of categories) {
+            let groups = priv[cat] || {};
+            for (let g in groups) {
+                if (Array.isArray(groups[g])) {
+                    for (let item of groups[g]) {
+                        if (typeof item === 'string' && !item.startsWith('data:image')) {
+                            allItems.push(item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (allItems.length === 0) return null;
+    
+    // 随机取 1-3 条
+    let count = Math.floor(Math.random() * 3) + 1;
+    count = Math.min(count, allItems.length);
+    let shuffled = [...allItems];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        let j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    let selected = shuffled.slice(0, count);
+    return selected.join(" ");
+}
+
+// 请求桌面通知权限
+function requestDesktopNotificationPermission() {
+    if (!("Notification" in window)) {
+        alert("当前浏览器不支持桌面通知");
+        return;
+    }
+    if (Notification.permission === "granted") {
+        desktopNotificationPermission = true;
+        alert("桌面通知已开启");
+        return;
+    }
+    if (Notification.permission === "denied") {
+        alert("通知权限已被拒绝，请在浏览器设置中重新允许");
+        return;
+    }
+    Notification.requestPermission().then(function(permission) {
+        if (permission === "granted") {
+            desktopNotificationPermission = true;
+            alert("桌面通知已开启");
+        } else {
+            alert("通知权限被拒绝");
+        }
+    });
+}
+
+// 发送桌面通知
+function sendDesktopNotification(title, body, sessionId) {
+    if (!desktopNotificationPermission) return;
+    if (!("Notification" in window)) return;
+    if (Notification.permission !== "granted") return;
+    if (!document.hidden) return; // 页面在前台不弹
+    
+    let notification = new Notification(title, {
+        body: body,
+        icon: "data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'%3E%3Ccircle cx='50' cy='50' r='50' fill='%2307c160'/%3E%3Ctext x='50' y='65' font-size='50' text-anchor='middle' fill='white' font-family='sans-serif'%3E💬%3C/text%3E%3C/svg%3E"
+    });
+    notification.onclick = function() {
+        notification.close();
+        // 切换到该好友的聊天窗口
+        let session = appData.sessions.find(function(s) { return s.sessionId === sessionId; });
+        if (session) {
+            // 关闭当前打开的聊天窗口（如果有）
+            if (currentOpenChatWindow) {
+                currentOpenChatWindow.remove();
+                currentOpenChatWindow = null;
+                currentOpenSessionId = null;
+                currentOpenFriendId = null;
+            }
+            openChatSession(session);
+        }
+        window.focus();
+    };
+    setTimeout(function() { notification.close(); }, 8000);
+}
+
+// 主动消息调度器：每5-10分钟检查一次
+function startAutoMessageScheduler() {
+    if (autoMessageIntervalId) {
+        clearInterval(autoMessageIntervalId);
+        autoMessageIntervalId = null;
+    }
+    
+    function checkAndSend() {
+        let now = Date.now();
+        let coupleFriends = appData.friends.filter(function(f) {
+            let space = getCoupleSpace(f.id);
+            return space && space.enabled === true;
+        });
+        
+        for (let friend of coupleFriends) {
+            let sessionId = "chat_f_" + friend.id;
+            let msgs = appData.messages[sessionId] || [];
+            
+            // 找到最后一条消息的时间（不管是自己发的还是对方发的）
+            let lastMsgTime = null;
+            if (msgs.length > 0) {
+                let lastMsg = msgs[msgs.length - 1];
+                if (lastMsg && lastMsg.timestamp) {
+                    lastMsgTime = lastMsg.timestamp;
+                } else if (lastMsg && lastMsg.time) {
+                    let parsed = new Date(lastMsg.time).getTime();
+                    if (!isNaN(parsed)) lastMsgTime = parsed;
+                }
+            }
+            
+            // 如果没有消息记录，说明从未聊过，直接发送
+            if (!lastMsgTime) {
+                lastMsgTime = 0;
+            }
+            
+            let probability = getSendProbability(lastMsgTime);
+            let random = Math.random() * 100;
+            
+            if (random < probability) {
+                // 生成消息内容
+                let content = generateAutoMessage(friend.id);
+                if (content) {
+                    // 检查该会话是否有未读消息（对方发的未读）
+                    let hasUnread = msgs.some(function(m) {
+                        return m.from !== "self" && !m.read;
+                    });
+                    
+                    // 发送消息（fromSelf = false 表示对方发的）
+                    sendMessage(sessionId, content, false, {
+                        id: friend.id,
+                        name: friend.name,
+                        avatar: friend.avatar
+                    }, false, false, null, null);
+                    
+                    // 如果该会话有未读消息（用户没点开看过），弹桌面通知
+                    if (hasUnread || true) {
+                        // 检查当前是否有未读消息
+                        let currentUnread = appData.messages[sessionId] ? 
+                            appData.messages[sessionId].filter(function(m) {
+                                return m.from !== "self" && !m.read;
+                            }).length : 0;
+                        if (currentUnread > 0) {
+                            let preview = content.length > 50 ? content.substring(0, 50) + "..." : content;
+                            sendDesktopNotification(friend.name, preview, sessionId);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    // 立即执行一次
+    setTimeout(checkAndSend, 5000);
+    
+    // 每5-10分钟执行一次
+    autoMessageIntervalId = setInterval(function() {
+        checkAndSend();
+    }, 300000 + Math.random() * 300000);
 }
 
 // ==================== 存储检测工具函数 ====================
@@ -4352,8 +4553,8 @@ function initDefaultData() {
         { id: "f3", name: "陈屿", group: "亲人", avatar: "☀️" }
     ];
     appData.groups = [
-        { id: "g1", name: "快乐老家", members: ["f1","f2","self"], avatar: "🏠" }
-    ];
+    { id: "g1", name: "快乐老家", members: ["f1","f2","self"], avatar: "家" }
+];
     appData.lexicon = {
         wordCards: { "默认": ["在的", "加油", "哈哈哈", "不错哦"] },
         emojis: { "默认": [] },
@@ -4759,7 +4960,7 @@ function buildSessionsFromData() {
         let msgs = appData.messages[sid] || [];
         let last = msgs.length ? msgs[msgs.length-1] : null;
         newSessions.push({
-            sessionId: sid, type: "group", targetId: g.id, name: g.name, avatar: g.avatar || "👥",
+    sessionId: sid, type: "group", targetId: g.id, name: g.name, avatar: g.avatar || "群",
             lastMsg: last ? (last.isVote ? `投票：${last.title}` : (last.text ? (last.text.length > 20 ? last.text.substring(0,20)+"..." : last.text) : "图片")) : "群聊开始", 
             lastTime: last ? last.time : "",
             unread: msgs.filter(m => m.from !== "self" && !m.read).length,
@@ -15757,7 +15958,7 @@ let avatarHtml = renderAvatarWithFrame(f.avatar, frameId, 44);
             if (g.avatar && g.avatar.startsWith("data:image")) {
                 avatarHtml = `<img src="${g.avatar}">`;
             } else {
-                avatarHtml = g.avatar || "👥";
+                avatarHtml = g.avatar || "群";
             }
             chatgroupsPanel.innerHTML += `<div class="contact-item" data-groupid="${g.id}" style="padding:10px 12px;">
                 <div class="avatar" style="width:44px; height:44px; font-size:22px;">${avatarHtml}</div>
@@ -15908,7 +16109,7 @@ let avatarHtml = renderAvatarWithFrame(f.avatar, frameId, 44);
                                 members.push(selectedId);
                             }
                             let newId = "g" + Date.now();
-                            appData.groups.push({ id: newId, name: name, members: members, avatar: "👥" });
+appData.groups.push({ id: newId, name: name, members: members, avatar: "群" });
                             saveData();
                             buildSessionsFromData();
                             renderContactsPage();
@@ -15916,7 +16117,7 @@ let avatarHtml = renderAvatarWithFrame(f.avatar, frameId, 44);
                         });
                     } else {
                         let newId = "g" + Date.now();
-                        appData.groups.push({ id: newId, name: name, members: members, avatar: "👥" });
+appData.groups.push({ id: newId, name: name, members: members, avatar: "群" });
                         saveData();
                         buildSessionsFromData();
                         renderContactsPage();
@@ -15955,12 +16156,13 @@ function renderSettingsPage() {
         <div class="settings-item" data-setting="globalTheme">全局装扮</div>
         <div class="settings-item" data-setting="storage">存储</div>
         <div class="settings-item" data-setting="diary">日记</div>
-        <div class="settings-item" data-setting="memory">记·念</div>
+        <div class="settings-item" data-setting="memory">记念</div>
         <div class="settings-item" data-setting="chat">聊天设置</div>
         <div class="settings-item" data-setting="calendar">标准日历</div>
-        <div class="settings-item" data-setting="exportData">📤 导出所有数据</div>
-            <div class="settings-item" data-setting="exportChatLog">📝 导出聊天记录（可读）</div>
-        <div class="settings-item" data-setting="importData">📥 导入数据</div>
+        <div class="settings-item" data-setting="exportData">导出所有数据</div>
+        <div class="settings-item" data-setting="exportChatLog">导出聊天记录（可读）</div>
+        <div class="settings-item" data-setting="importData">导入数据</div>
+        <div class="settings-item" data-setting="desktopNotify">桌面通知</div>
     `;
     
     let items = container.querySelectorAll("[data-setting]");
@@ -15991,12 +16193,14 @@ function renderSettingsPage() {
                 openChatSettingsModal();
             } else if (type === "calendar") {
                 openCalendarModal();
-                } else if (type === "exportData") {
-    exportAllData();
-} else if (type === "exportChatLog") {
-    exportChatLog();
-} else if (type === "importData") {
-    importAllData();
+            } else if (type === "exportData") {
+                exportAllData();
+            } else if (type === "exportChatLog") {
+                exportChatLog();
+            } else if (type === "importData") {
+                importAllData();
+            } else if (type === "desktopNotify") {
+                requestDesktopNotificationPermission();
             }
         });
     }
@@ -20332,10 +20536,12 @@ function importAllData() {
                 saveData();
                 buildSessionsFromData();
                 restoreVoteTimers();
-                startLetterCheckLoop();
-                applyGlobalTheme();
-                renderCurrentPage();
-                attachDynamicEvents();
+startLetterCheckLoop();
+applyGlobalTheme();
+// 启动主动消息调度器
+startAutoMessageScheduler();
+renderCurrentPage();
+attachDynamicEvents();
                 
                 var successMsg = "✅ 数据导入成功！\n\n" +
                       "📅 备份时间：" + (importedData.exportTime || "未知") + "\n" +
