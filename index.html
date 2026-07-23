@@ -8485,7 +8485,7 @@ function showLetterModal(friendId) {
     
     function showTextareaModal(title, placeholder, onConfirm) {
         let modalHtml = `
-            <div class="modal-container" style="width: 90%; max-width: 450px; padding: 16px;">
+            <div class="modal-container" style="width: 95%; max-width: 600px; padding: 20px;">
                 <div style="margin-bottom: 12px; font-size: 16px; font-weight: 600;">${escapeHtml(title)}</div>
                 <textarea id="letterTextarea" placeholder="${escapeHtml(placeholder)}" style="width: 100%; height: 150px; padding: 10px; border-radius: 10px; border: 0.5px solid #ccc; font-size: 14px; resize: vertical; font-family: inherit;"></textarea>
                 <div style="display: flex; gap: 10px; margin-top: 12px;">
@@ -8542,7 +8542,7 @@ function showLetterModal(friendId) {
         }
 
         let detailModal = showModal(`
-            <div class="modal-container" style="width: 90%; max-width: 450px; padding: 16px;">
+            <div class="modal-container" style="width: 95%; max-width: 600px; padding: 20px;">
                 <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
                     <span id="closeLetterDetail" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
                     <span style="font-weight: 600;">信件详情</span>
@@ -8586,6 +8586,74 @@ function showLetterModal(friendId) {
             };
         }
     }
+    
+    function showReplyOnly(letter) {
+    let replyContent = (letter.reply || "").replace(/\n/g, "<br>");
+    let originalTime = formatDateTime(letter.time);
+
+    let modal = showModal(`
+        <div class="modal-container" style="width: 95%; max-width: 600px; padding: 20px;">
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+                <span id="closeReplyOnly" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
+                <span style="font-weight: 600;">📬 回信</span>
+                <span id="backFromReplyOnly" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
+            </div>
+            <div style="background: #f8f8fa; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; color: #8e8e93;">
+                📌 回复我于 ${originalTime} 的信
+            </div>
+            <div style="background: #e8f5e9; padding: 16px; border-radius: 12px;">
+                <div style="font-size: 15px; line-height: 1.8; color: #1c1c1e;">
+                    ${replyContent}
+                </div>
+            </div>
+        </div>
+    `);
+
+    let closeBtn = modal.querySelector("#closeReplyOnly");
+    if (closeBtn) closeBtn.onclick = () => modal.remove();
+    
+    let backBtn = modal.querySelector("#backFromReplyOnly");
+    if (backBtn) {
+        backBtn.onclick = () => {
+            modal.remove();
+            showLetterModal(friendId);
+        };
+    }
+}
+
+function showMyReplyOnly(letter) {
+    let replyContent = (letter.reply || "").replace(/\n/g, "<br>");
+    let originalTime = formatDateTime(letter.time);
+
+    let modal = showModal(`
+        <div class="modal-container" style="width: 95%; max-width: 600px; padding: 20px;">
+            <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+                <span id="closeMyReplyOnly" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
+                <span style="font-weight: 600;">💬 我的回信</span>
+                <span id="backFromMyReplyOnly" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
+            </div>
+            <div style="background: #f8f8fa; padding: 10px; border-radius: 8px; margin-bottom: 10px; font-size: 12px; color: #8e8e93;">
+                📌 回复对方于 ${originalTime} 的信
+            </div>
+            <div style="background: #e8f5e9; padding: 16px; border-radius: 12px;">
+                <div style="font-size: 15px; line-height: 1.8; color: #1c1c1e;">
+                    ${replyContent}
+                </div>
+            </div>
+        </div>
+    `);
+
+    let closeBtn = modal.querySelector("#closeMyReplyOnly");
+    if (closeBtn) closeBtn.onclick = () => modal.remove();
+    
+    let backBtn = modal.querySelector("#backFromMyReplyOnly");
+    if (backBtn) {
+        backBtn.onclick = () => {
+            modal.remove();
+            showLetterModal(friendId);
+        };
+    }
+}
     
     function renderMyLetters() {
         if (myLetters.length === 0) return `<div style="text-align:center; padding:40px; color:#8e8e93;">✉️ 暂无我写的信</div>`;
@@ -8735,27 +8803,27 @@ function showLetterModal(friendId) {
     let contentArea = modal.querySelector("#letterContentArea");
     if (contentArea) {
         contentArea.addEventListener("click", (e) => {
-            let item = e.target.closest(".letter-item");
-            if (item) {
-                let letterId = item.dataset.letterId;
-                let letterType = item.dataset.letterType;
-                let letter = null;
+    let item = e.target.closest(".letter-item");
+    if (item) {
+        let letterId = item.dataset.letterId;
+        let letterType = item.dataset.letterType;
+        let letter = null;
 
-                if (letterType === "my") {
-                    letter = myLetters.find(l => l.id == letterId);
-                    if (letter) showLetterDetail(letter, true);
-                } else if (letterType === "their") {
-                    letter = theirLetters.find(l => l.id == letterId);
-                    if (letter) showLetterDetail(letter, false);
-                } else if (letterType === "reply") {
-                    letter = theirReplies.find(l => l.id == letterId);
-                    if (letter) showLetterDetail(letter, false, true);
-                } else if (letterType === "myreply") {
-                    letter = myReplies.find(l => l.id == letterId);
-                    if (letter) showLetterDetail(letter, true);
-                }
-            }
-        });
+        if (letterType === "my") {
+            letter = myLetters.find(l => l.id == letterId);
+            if (letter) showLetterDetail(letter, true);
+        } else if (letterType === "their") {
+            letter = theirLetters.find(l => l.id == letterId);
+            if (letter) showLetterDetail(letter, false);
+        } else if (letterType === "reply") {
+            letter = theirReplies.find(l => l.id == letterId);
+            if (letter) showReplyOnly(letter);
+        } else if (letterType === "myreply") {
+            letter = myReplies.find(l => l.id == letterId);
+            if (letter) showMyReplyOnly(letter);
+        }
+    }
+});
     }
     
     let tabsContainer = modal.querySelector("#letterTabsContainer");
