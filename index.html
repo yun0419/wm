@@ -5445,7 +5445,7 @@ function getRandomCommentText(friendId) {
         for (let i = 0; i < count; i++) {
             parts.push(allItems[Math.floor(Math.random() * allItems.length)]);
         }
-        return parts.join("");
+        return parts.join(" ");
     } else {
         return allItems[Math.floor(Math.random() * allItems.length)];
     }
@@ -8483,7 +8483,6 @@ function showLetterModal(friendId) {
         return `${minutes}分钟后`;
     }
     
-    // 显示写信/回信的大文本框模态框
     function showTextareaModal(title, placeholder, onConfirm) {
         let modalHtml = `
             <div class="modal-container" style="width: 90%; max-width: 450px; padding: 16px;">
@@ -8517,77 +8516,76 @@ function showLetterModal(friendId) {
         setTimeout(() => textarea.focus(), 100);
     }
     
-    // 显示信件详情
-function showLetterDetail(letter, isFromMe, isReply = false) {
-    let myName = appData.user.name;
-    let otherName = friendName;
-    let receiver = isFromMe ? otherName : myName;
-    let sender = isFromMe ? myName : otherName;
-    let content = (letter.content || "").replace(/\n/g, "<br>");
+    function showLetterDetail(letter, isFromMe, isReply = false) {
+        let myName = appData.user.name;
+        let otherName = friendName;
+        let receiver = isFromMe ? otherName : myName;
+        let sender = isFromMe ? myName : otherName;
+        let content = (letter.content || "").replace(/\n/g, "<br>");
 
-    let replyHtml = "";
-    if (letter.reply) {
-        let replyContent = letter.reply.replace(/\n/g, "<br>");
-        replyHtml = `
-            <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ccc;">
-                <div style="font-size: 12px; color: #07c160;">📬 回信</div>
-                <div style="background: #e8f5e9; padding: 10px; border-radius: 10px; margin-top: 5px;">
-                    [${escapeHtml(receiver)}：<br>
-                    ${replyContent}<br>
-                    ${escapeHtml(sender)}]
+        let replyHtml = "";
+        if (letter.reply) {
+            let replyContent = letter.reply.replace(/\n/g, "<br>");
+            replyHtml = `
+                <div style="margin-top: 12px; padding-top: 10px; border-top: 1px dashed #ccc;">
+                    <div style="font-size: 12px; color: #07c160;">📬 回信</div>
+                    <div style="background: #e8f5e9; padding: 10px; border-radius: 10px; margin-top: 5px;">
+                        [${escapeHtml(receiver)}：<br>
+                        ${replyContent}<br>
+                        ${escapeHtml(sender)}]
+                    </div>
+                    <div style="font-size: 10px; color: #8e8e93; margin-top: 4px;">${formatDateTime(letter.replyTime)}</div>
                 </div>
-                <div style="font-size: 10px; color: #8e8e93; margin-top: 4px;">${formatDateTime(letter.replyTime)}</div>
-            </div>
-        `;
-    } else if (letter.expectedReplyTimestamp && letter.direction === "my") {
-        replyHtml = `<div class="expected-time" style="margin-top: 8px; font-size: 11px; color: #ff9500;">⏳ 预计 ${formatExpectedTime(letter.expectedReplyTimestamp)} 回信</div>`;
-    }
+            `;
+        } else if (letter.expectedReplyTimestamp && letter.direction === "my") {
+            replyHtml = `<div class="expected-time" style="margin-top: 8px; font-size: 11px; color: #ff9500;">⏳ 预计 ${formatExpectedTime(letter.expectedReplyTimestamp)} 回信</div>`;
+        }
 
-    let detailModal = showModal(`
-        <div class="modal-container" style="width: 90%; max-width: 450px; padding: 16px;">
-            <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
-                <span id="closeLetterDetail" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
-                <span style="font-weight: 600;">信件详情</span>
-                <span id="backFromLetterDetail" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
-            </div>
-            <div style="background: #f8f8fa; padding: 14px; border-radius: 12px; margin-top: 8px;">
-                <div style="font-size: 12px; color: #8e8e93; margin-bottom: 8px;">${formatDateTime(letter.time)}</div>
-                <div style="font-size: 14px; line-height: 1.5;">
-                    [${escapeHtml(receiver)}：<br>
-                    ${escapeHtml(content)}<br>
-                    ${escapeHtml(sender)}]
+        let detailModal = showModal(`
+            <div class="modal-container" style="width: 90%; max-width: 450px; padding: 16px;">
+                <div style="margin-bottom: 12px; display: flex; justify-content: space-between;">
+                    <span id="closeLetterDetail" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
+                    <span style="font-weight: 600;">信件详情</span>
+                    <span id="backFromLetterDetail" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
                 </div>
-                ${replyHtml}
+                <div style="background: #f8f8fa; padding: 14px; border-radius: 12px; margin-top: 8px;">
+                    <div style="font-size: 12px; color: #8e8e93; margin-bottom: 8px;">${formatDateTime(letter.time)}</div>
+                    <div style="font-size: 14px; line-height: 1.5;">
+                        [${escapeHtml(receiver)}：<br>
+                        ${content}<br>
+                        ${escapeHtml(sender)}]
+                    </div>
+                    ${replyHtml}
+                </div>
+                ${!letter.reply && letter.direction === "their" ? `<button id="replyFromDetailBtn" style="width: 100%; margin-top: 12px; background: #07c160; padding: 8px;">✍️ 回信</button>` : ""}
             </div>
-            ${!letter.reply && letter.direction === "their" ? `<button id="replyFromDetailBtn" style="width: 100%; margin-top: 12px; background: #07c160; padding: 8px;">✍️ 回信</button>` : ""}
-        </div>
-    `);
+        `);
 
-    let closeBtn = detailModal.querySelector("#closeLetterDetail");
-    if (closeBtn) closeBtn.onclick = () => detailModal.remove();
-    
-    let backBtn = detailModal.querySelector("#backFromLetterDetail");
-    if (backBtn) {
-        backBtn.onclick = () => {
-            detailModal.remove();
-            showLetterModal(friendId);
-        };
-    }
-
-    let replyFromDetailBtn = detailModal.querySelector("#replyFromDetailBtn");
-    if (replyFromDetailBtn) {
-        replyFromDetailBtn.onclick = () => {
-            detailModal.remove();
-            showTextareaModal("回信", `回复 ${friendName} 于 ${formatDateTime(letter.time)} 写来的信`, (replyContent) => {
-                letter.reply = replyContent;
-                letter.replyTime = new Date().toISOString();
-                saveData();
+        let closeBtn = detailModal.querySelector("#closeLetterDetail");
+        if (closeBtn) closeBtn.onclick = () => detailModal.remove();
+        
+        let backBtn = detailModal.querySelector("#backFromLetterDetail");
+        if (backBtn) {
+            backBtn.onclick = () => {
+                detailModal.remove();
                 showLetterModal(friendId);
-                alert("回信已发送");
-            });
-        };
+            };
+        }
+
+        let replyFromDetailBtn = detailModal.querySelector("#replyFromDetailBtn");
+        if (replyFromDetailBtn) {
+            replyFromDetailBtn.onclick = () => {
+                detailModal.remove();
+                showTextareaModal("回信", `回复 ${friendName} 于 ${formatDateTime(letter.time)} 写来的信`, (replyContent) => {
+                    letter.reply = replyContent;
+                    letter.replyTime = new Date().toISOString();
+                    saveData();
+                    showLetterModal(friendId);
+                    alert("回信已发送");
+                });
+            };
+        }
     }
-}
     
     function renderMyLetters() {
         if (myLetters.length === 0) return `<div style="text-align:center; padding:40px; color:#8e8e93;">✉️ 暂无我写的信</div>`;
@@ -8596,9 +8594,12 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
             let replyHtml = '';
             let replyStatus = '';
             if (letter.reply) {
+                // 回信截取30字
+                let replyPreview = letter.reply || '';
+                let shortReply = replyPreview.length > 30 ? replyPreview.substring(0, 30) + '...' : replyPreview;
                 replyHtml = `<div class="letter-reply" style="margin-top:8px; padding:8px; background:#e8f5e9; border-radius:8px;">
                     <div style="font-size:11px; color:#07c160;">📬 对方的回信（${formatDateTime(letter.replyTime)}）</div>
-                    <div>${escapeHtml(letter.reply)}</div>
+                    <div>${escapeHtml(shortReply)}</div>
                 </div>`;
                 replyStatus = '✅ 已回信';
             } else if (letter.expectedReplyTimestamp) {
@@ -8606,8 +8607,11 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
             } else {
                 replyStatus = '📬 待回信';
             }
+            // 信件内容也截取30字
+            let contentPreview = letter.content || '';
+            let shortContent = contentPreview.length > 30 ? contentPreview.substring(0, 30) + '...' : contentPreview;
             html += `<div class="letter-item" data-letter-id="${letter.id}" data-letter-type="my" style="margin-bottom:12px; border-left:3px solid #07c160; padding-left:10px;">
-                <div class="letter-flex"><span style="color:#07c160;">📤 我</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(letter.content.length > 50 ? letter.content.substring(0,50)+"..." : letter.content)}</span><span style="color:#ff9500; font-size:11px;">${escapeHtml(friendName)}</span></div>
+                <div class="letter-flex"><span style="color:#07c160;">📤 我</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(shortContent)}</span><span style="color:#ff9500; font-size:11px;">${escapeHtml(friendName)}</span></div>
                 <div class="letter-time">发送：${formatDateTime(letter.time)} <span style="color: ${letter.reply ? '#07c160' : '#ff9500'};">${replyStatus}</span></div>
                 ${replyHtml}
             </div>`;
@@ -8616,12 +8620,15 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
     }
     
     function renderTheirReplies() {
-    if (theirReplies.length === 0) return `<div style="text-align:center; padding:40px; color:#8e8e93;">📭 暂无对方的回信</div>`;
-    let html = '';
-    for (let letter of [...theirReplies].reverse()) {
+        if (theirReplies.length === 0) return `<div style="text-align:center; padding:40px; color:#8e8e93;">📭 暂无对方的回信</div>`;
+        let html = '';
+        for (let letter of [...theirReplies].reverse()) {
+            // 回信截取30字
+            let replyPreview = letter.reply || '';
+            let shortReply = replyPreview.length > 30 ? replyPreview.substring(0, 30) + '...' : replyPreview;
             html += `<div class="letter-item" data-letter-id="${letter.id}" data-letter-type="reply" style="margin-bottom:12px; background:#f8f8fa; border-radius:10px; padding:10px;">
                 <div style="font-size:11px; color:#8e8e93;">📌 回复我于 ${formatDateTime(letter.time)} 的信</div>
-                <div class="letter-flex"><span style="color:#ff9500;">${escapeHtml(friendName)}</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(letter.reply.length > 50 ? letter.reply.substring(0,50)+"..." : letter.reply)}</span><span style="color:#07c160;">📬 回复</span></div>
+                <div class="letter-flex"><span style="color:#ff9500;">${escapeHtml(friendName)}</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(shortReply)}</span><span style="color:#07c160;">📬 回复</span></div>
                 <div class="letter-time">回信：${formatDateTime(letter.replyTime)}</div>
             </div>`;
         }
@@ -8639,9 +8646,12 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
             } else {
                 replyButtonHtml = `<div style="width:100%; margin-top:8px; padding:6px; font-size:12px; color:#07c160; text-align:center;">✅ 已回复</div>`;
             }
+            // 信件内容截取30字
+            let contentPreview = letter.content || '';
+            let shortContent = contentPreview.length > 30 ? contentPreview.substring(0, 30) + '...' : contentPreview;
             html += `
                 <div class="letter-item" data-letter-id="${letter.id}" data-letter-type="their" style="margin-bottom:12px; border-left:3px solid #ff9500; padding-left:10px;">
-                    <div class="letter-flex"><span style="color:#ff9500;">📨 ${escapeHtml(friendName)}</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(letter.content.length > 50 ? letter.content.substring(0,50)+"..." : letter.content)}</span><span style="color:#07c160; font-size:11px;">我</span></div>
+                    <div class="letter-flex"><span style="color:#ff9500;">📨 ${escapeHtml(friendName)}</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(shortContent)}</span><span style="color:#07c160; font-size:11px;">我</span></div>
                     <div class="letter-time">来信：${formatDateTime(letter.time)} <span style="color: ${letter.reply ? '#07c160' : '#ff9500'};">${replyStatus}</span></div>
                     ${replyButtonHtml}
                 </div>
@@ -8655,9 +8665,12 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
         if (replies.length === 0) return `<div style="text-align:center; padding:40px; color:#8e8e93;">💬 暂无我的回信</div>`;
         let html = '';
         for (let letter of [...replies].reverse()) {
+            // 回信截取30字
+            let replyPreview = letter.reply || '';
+            let shortReply = replyPreview.length > 30 ? replyPreview.substring(0, 30) + '...' : replyPreview;
             html += `<div class="letter-item" data-letter-id="${letter.id}" data-letter-type="myreply" style="margin-bottom:12px; background:#f8f8fa; border-radius:10px; padding:10px;">
                 <div style="font-size:11px; color:#8e8e93;">📌 回复对方于 ${formatDateTime(letter.time)} 的信</div>
-                <div class="letter-flex"><span style="color:#07c160;">📝 我</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(letter.reply.length > 50 ? letter.reply.substring(0,50)+"..." : letter.reply)}</span><span style="color:#ff9500;">${escapeHtml(friendName)}</span></div>
+                <div class="letter-flex"><span style="color:#07c160;">📝 我</span><span style="flex:1; text-align:center; font-size:12px; color:#666;">${escapeHtml(shortReply)}</span><span style="color:#ff9500;">${escapeHtml(friendName)}</span></div>
                 <div class="letter-time">回信：${formatDateTime(letter.replyTime)}</div>
             </div>`;
         }
@@ -8665,22 +8678,21 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
     }
     
     function renderContent() {
-    let letters = appData.letters[friendId] || [];
-    let hasUnread = letters.some(l => l.direction === "their" && !l.reply && l.from === "other");
-    if (hasUnread) {
-    appData.friendLetterRedDot[friendId] = true;
-    saveData();
-    // ===== 修复：红点更新后刷新联系人页面 =====
-    if (currentPage === "contacts") {
-        renderContactsPage();
+        let letters = appData.letters[friendId] || [];
+        let hasUnread = letters.some(l => l.direction === "their" && !l.reply && l.from === "other");
+        if (hasUnread) {
+            appData.friendLetterRedDot[friendId] = true;
+            saveData();
+            if (currentPage === "contacts") {
+                renderContactsPage();
+            }
+        }
+        
+        if (currentTab === 'myLetters') return renderMyLetters();
+        if (currentTab === 'theirReplies') return renderTheirReplies();
+        if (currentTab === 'theirLetters') return renderTheirLetters();
+        return renderMyReplies();
     }
-}
-    
-    if (currentTab === 'myLetters') return renderMyLetters();
-    if (currentTab === 'theirReplies') return renderTheirReplies();
-    if (currentTab === 'theirLetters') return renderTheirLetters();
-    return renderMyReplies();
-}
     
     let modal = showModal(`
         <div class="full-page-modal" style="height:100%; display:flex; flex-direction:column; padding:0;">
@@ -8705,7 +8717,6 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
     let container = modal.querySelector(".modal-container");
     if (container) container.classList.add("full-page-modal");
     
-    // ✕ 关闭 → 回到消息列表
     let closeBtn = modal.querySelector("#closeLetterModal");
     if (closeBtn) {
         closeBtn.onclick = () => {
@@ -8713,7 +8724,6 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
         };
     }
     
-    // ← 返回 → 回到个人主页
     let backBtn = modal.querySelector("#backToProfileFromLetter");
     if (backBtn) {
         backBtn.onclick = () => {
@@ -8722,7 +8732,6 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
         };
     }
     
-    // 点击信件项查看详情
     let contentArea = modal.querySelector("#letterContentArea");
     if (contentArea) {
         contentArea.addEventListener("click", (e) => {
@@ -8817,6 +8826,7 @@ function showLetterDetail(letter, isFromMe, isReply = false) {
         };
     }
 }
+
 // ==================== 拍一拍消息生成 ====================
 function getRandomPatMessage(fromSelf = true, friendId = null) {
     let patActions = [];
@@ -15641,7 +15651,7 @@ function scheduleFriendAutoCommentAfterMyComment(momentId, myCommentText) {
             [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
         }
         let selected = shuffled.slice(0, count);
-        let commentText = selected.join("");
+        let commentText = selected.join(" ");
         
         if (!moment.comments) moment.comments = [];
         moment.comments.push({ 
@@ -15692,7 +15702,7 @@ function scheduleAllFriendsCommentOnNewMoment(momentId) {
                 [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
             }
             let selected = shuffled.slice(0, count);
-            let commentText = selected.join("");
+            let commentText = selected.join(" ");
             
             if (!moment.comments) moment.comments = [];
             moment.comments.push({
