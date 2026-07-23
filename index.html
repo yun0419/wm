@@ -8301,17 +8301,19 @@ function showFriendDiariesModal(friendId) {
         let commentsHtml = "";
         if (diary.comments && diary.comments.length) {
             commentsHtml = `<div class="moment-comments">`;
-            for (let cmt of diary.comments) {
-                let commenterName = "";
-                if (cmt.from === "self") {
-                    commenterName = "我";
-                } else {
-                    let foundFriend = appData.friends.find(f => f.id === cmt.from);
-                    commenterName = foundFriend ? foundFriend.name : "好友";
-                }
-                commentsHtml += `<div class="moment-comment"><span>${escapeHtml(commenterName)}</span>：${renderCommentText(cmt.text)}</div>`;
-            }
-            commentsHtml += `</div>`;
+for (let cmt of diary.comments) {
+    let commenterName = "";
+    if (cmt.from === "self") {
+        commenterName = "我";
+    } else {
+        let foundFriend = appData.friends.find(f => f.id === cmt.from);
+        commenterName = foundFriend ? foundFriend.name : "好友";
+    }
+    commentsHtml += `<div class="moment-comment" data-comment-name="${escapeHtml(commenterName)}" style="cursor:default;user-select:none;">`;
+    commentsHtml += `<span>${escapeHtml(commenterName)}</span>：${renderCommentText(cmt.text)}`;
+    commentsHtml += `</div>`;
+}
+commentsHtml += `</div>`;
         }
         let formattedContent = formatDiaryContent(diary.content);
         let html = `
@@ -15423,10 +15425,12 @@ function renderMomentTimeline(moments, onPublish) {
                     let commentsHtml = "";
                     if (m.comments && m.comments.length) {
                         commentsHtml = `<div class="moment-comments">`;
-                        for (let cmt of m.comments) {
-                            commentsHtml += `<div class="moment-comment"><span>${escapeHtml(cmt.name)}</span>：${renderCommentText(cmt.text)}</div>`;
-                        }
-                        commentsHtml += `</div>`;
+for (let cmt of m.comments) {
+    commentsHtml += `<div class="moment-comment" data-comment-name="${escapeHtml(cmt.name)}" style="cursor:default;user-select:none;">`;
+    commentsHtml += `<span>${escapeHtml(cmt.name)}</span>：${renderCommentText(cmt.text)}`;
+    commentsHtml += `</div>`;
+}
+commentsHtml += `</div>`;
                     }
                     let avatarHtml = "";
                     if (appData.user.avatar && appData.user.avatar.startsWith("data:image")) {
@@ -15563,6 +15567,43 @@ let container = modal.querySelector(".modal-container");
             }
         };
     }
+    
+    // 长按评论回复
+let commentDivs = modal.querySelectorAll(".moment-comment");
+for (let div of commentDivs) {
+    let pressTimer = null;
+    div.addEventListener("touchstart", (e) => {
+        pressTimer = setTimeout(() => {
+            let name = div.dataset.commentName;
+            if (name) {
+                let input = div.closest(".moment-item").querySelector(".momentCommentInput");
+                if (input) {
+                    input.value = "@" + name + " ";
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            }
+        }, 500);
+        div.addEventListener("touchend", () => { clearTimeout(pressTimer); });
+        div.addEventListener("touchmove", () => { clearTimeout(pressTimer); });
+    });
+    // 鼠标长按（PC端）
+    div.addEventListener("mousedown", (e) => {
+        pressTimer = setTimeout(() => {
+            let name = div.dataset.commentName;
+            if (name) {
+                let input = div.closest(".moment-item").querySelector(".momentCommentInput");
+                if (input) {
+                    input.value = "@" + name + " ";
+                    input.focus();
+                    input.setSelectionRange(input.value.length, input.value.length);
+                }
+            }
+        }, 500);
+        div.addEventListener("mouseup", () => { clearTimeout(pressTimer); });
+        div.addEventListener("mouseleave", () => { clearTimeout(pressTimer); });
+    });
+}
     
     // 删除功能
     let deleteBtns = modal.querySelectorAll(".deleteMomentBtn");
@@ -17098,6 +17139,42 @@ function openDiaryListModal() {
                 } else {
                     alert("请输入评论内容");
                 }
+            });
+        }
+        
+        // 长按评论回复
+        let commentDivs = modal.querySelectorAll(".moment-comment");
+        for (let div of commentDivs) {
+            let pressTimer = null;
+            div.addEventListener("touchstart", (e) => {
+                pressTimer = setTimeout(() => {
+                    let name = div.dataset.commentName;
+                    if (name) {
+                        let input = div.closest(".diary-content-area").parentElement.querySelector(".diaryCommentInput");
+                        if (input) {
+                            input.value = "@" + name + " ";
+                            input.focus();
+                            input.setSelectionRange(input.value.length, input.value.length);
+                        }
+                    }
+                }, 500);
+                div.addEventListener("touchend", () => { clearTimeout(pressTimer); });
+                div.addEventListener("touchmove", () => { clearTimeout(pressTimer); });
+            });
+            div.addEventListener("mousedown", (e) => {
+                pressTimer = setTimeout(() => {
+                    let name = div.dataset.commentName;
+                    if (name) {
+                        let input = div.closest(".diary-content-area").parentElement.querySelector(".diaryCommentInput");
+                        if (input) {
+                            input.value = "@" + name + " ";
+                            input.focus();
+                            input.setSelectionRange(input.value.length, input.value.length);
+                        }
+                    }
+                }, 500);
+                div.addEventListener("mouseup", () => { clearTimeout(pressTimer); });
+                div.addEventListener("mouseleave", () => { clearTimeout(pressTimer); });
             });
         }
     }
