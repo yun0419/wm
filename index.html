@@ -283,11 +283,11 @@ body, .app, .page, .settings-item, button, input, textarea, .bubble, .moment-con
     font-size: 12px !important;
     padding: 5px 14px !important;
     border-radius: 20px !important;
-    white-space: pre-wrap !important;
+    white-space: normal !important;
     word-break: break-word !important;
     display: inline-block;
     width: auto;
-    max-width: none !important;
+    max-width: 90% !important;
 }
         .reply-preview {
             display: inline-block;
@@ -8949,6 +8949,21 @@ function getRandomPatMessage(fromSelf = true, friendId = null) {
     return result.trim();
 }
 
+// ===== 拍一拍消息换行辅助函数（超过20字符强制换行） =====
+function wrapPatMessage(text) {
+    if (!text) return text;
+    text = text.trim();
+    if (text.length <= 20) return text;
+    
+    let result = '';
+    for (let i = 0; i < text.length; i += 20) {
+        if (i > 0) result += '<br>';
+        result += text.substring(i, i + 20);
+    }
+    return result;
+}
+
+// ===== 拍一拍超过20字符强制换行 =====
 function sendPatMessage(sessionId, fromSelf = true) {
     let session = appData.sessions.find(s => s.sessionId === sessionId);
     let friendId = null;
@@ -8957,26 +8972,13 @@ function sendPatMessage(sessionId, fromSelf = true) {
     }
     let patText = getRandomPatMessage(fromSelf, friendId);
     
-    // 如果拍一拍文本超过18个字符，强制换行
-    if (patText.length > 20) {
-        let mid = Math.floor(patText.length / 2);
-        let breakPos = patText.lastIndexOf('🤍', mid);
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = patText.lastIndexOf('❤️', mid);
-        }
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = patText.lastIndexOf('💕', mid);
-        }
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = mid;
-        }
-        patText = patText.substring(0, breakPos + 1) + '\n' + patText.substring(breakPos + 1);
-    }
+    // ===== 超过20字符强制换行 =====
+    patText = wrapPatMessage(patText);
     
     sendMessage(sessionId, patText, fromSelf, null, true);
 }
 
-// 新增：用于群聊拍一拍时带上发送者信息
+// ===== 拍一拍超过20字符强制换行（带发送者信息） =====
 function sendPatMessageWithSender(sessionId, fromSelf = true, senderInfo = null) {
     let session = appData.sessions.find(s => s.sessionId === sessionId);
     let friendId = null;
@@ -8985,21 +8987,8 @@ function sendPatMessageWithSender(sessionId, fromSelf = true, senderInfo = null)
     }
     let patText = getRandomPatMessage(fromSelf, friendId);
     
-    // 如果拍一拍文本超过18个字符，强制换行
-    if (patText.length > 20) {
-        let mid = Math.floor(patText.length / 2);
-        let breakPos = patText.lastIndexOf('🤍', mid);
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = patText.lastIndexOf('❤️', mid);
-        }
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = patText.lastIndexOf('💕', mid);
-        }
-        if (breakPos === -1 || breakPos < 4) {
-            breakPos = mid;
-        }
-        patText = patText.substring(0, breakPos + 1) + '\n' + patText.substring(breakPos + 1);
-    }
+    // ===== 超过20字符强制换行 =====
+    patText = wrapPatMessage(patText);
     
     if (session && session.type === "group" && senderInfo) {
         sendMessage(sessionId, patText, false, senderInfo, true);
@@ -13834,6 +13823,9 @@ if (!isMine && session.type === 'group' && m.senderId) {
     }
 } else if (isVote && m.voteId) {
         contentHtml = renderVoteMessage(m.voteId, isMine, senderName);
+    } else if (isPat) {
+        // ===== 拍一拍消息：不转义，保留换行 =====
+        contentHtml = (m.text || '').replace(/\n/g, '<br>');
     } else if (m.text && m.text.startsWith('data:image')) {
     contentHtml = '<img src="' + m.text + '" style="max-width:60px; max-height:60px; border-radius:8px; cursor:pointer;" onclick="showImageViewer(\'' + m.text.replace(/'/g, "\\'") + '\')">';
 } else {
