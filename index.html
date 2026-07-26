@@ -283,11 +283,12 @@ body, .app, .page, .settings-item, button, input, textarea, .bubble, .moment-con
     font-size: 12px !important;
     padding: 5px 14px !important;
     border-radius: 20px !important;
-    white-space: normal !important;
-    word-break: break-word !important;
-    display: inline-block;
-    width: auto;
-    max-width: 90% !important;
+    white-space: nowrap !important;
+    word-break: keep-all !important;
+    display: inline-block !important;
+    width: auto !important;
+    max-width: none !important;
+    overflow-wrap: normal !important;
 }
         .reply-preview {
             display: inline-block;
@@ -8953,8 +8954,11 @@ function getRandomPatMessage(fromSelf = true, friendId = null) {
 function wrapPatMessage(text) {
     if (!text) return text;
     text = text.trim();
+    
+    // ≤20 字符：直接返回，不换行
     if (text.length <= 20) return text;
     
+    // >20 字符：每20个字符插入 <br> 强制换行
     let result = '';
     for (let i = 0; i < text.length; i += 20) {
         if (i > 0) result += '<br>';
@@ -13824,13 +13828,25 @@ if (!isMine && session.type === 'group' && m.senderId) {
 } else if (isVote && m.voteId) {
         contentHtml = renderVoteMessage(m.voteId, isMine, senderName);
     } else if (isPat) {
-        // ===== 拍一拍消息：不转义，保留换行 =====
-        contentHtml = (m.text || '').replace(/\n/g, '<br>');
-    } else if (m.text && m.text.startsWith('data:image')) {
+    // 拍一拍：≤20字符不换行，>20字符用<br>强制换行
+    var patText = m.text || '';
+    // 移除已有的<br>
+    patText = patText.replace(/<br>/g, '');
+    // 超过20字符才换行
+    if (patText.length > 20) {
+        var result = '';
+        for (var i = 0; i < patText.length; i += 20) {
+            if (i > 0) result += '<br>';
+            result += patText.substring(i, i + 20);
+        }
+        patText = result;
+    }
+    contentHtml = '<span style="white-space:nowrap;display:inline-block;">' + patText + '</span>';
+} else if (m.text && m.text.startsWith('data:image')) {
     contentHtml = '<img src="' + m.text + '" style="max-width:60px; max-height:60px; border-radius:8px; cursor:pointer;" onclick="showImageViewer(\'' + m.text.replace(/'/g, "\\'") + '\')">';
 } else {
-        contentHtml = escapeHtml(m.text || '');
-    }
+    contentHtml = escapeHtml(m.text || '');
+}
     
     var readMark = '';
     if (isMine && m.readByReceiver) {
