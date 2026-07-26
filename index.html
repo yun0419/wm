@@ -8902,19 +8902,7 @@ function showMyReplyOnly(letter) {
 function getRandomPatMessage(fromSelf = true, friendId = null) {
     let patActions = [];
     
-    // ✅ 从公共词条库收集（所有人共用）
-    let publicPat = appData.lexicon.public?.patPat || {};
-    for (let g in publicPat) {
-        if (Array.isArray(publicPat[g])) {
-            for (let item of publicPat[g]) {
-                if (item && item.trim() && typeof item === 'string') {
-                    patActions.push(item.trim());
-                }
-            }
-        }
-    }
-    
-    // ✅ 从私人词条库收集（仅该好友可用）
+    // ===== 优先级1：该好友的私人词条库 =====
     if (friendId && appData.privateLexicon[friendId] && appData.privateLexicon[friendId].patPat) {
         let privPat = appData.privateLexicon[friendId].patPat;
         for (let g in privPat) {
@@ -8928,19 +8916,34 @@ function getRandomPatMessage(fromSelf = true, friendId = null) {
         }
     }
     
-    // 如果没有任何拍一拍词条，使用默认值
+    // ===== 优先级2：公共词条库（私人词条为空时才使用） =====
+    if (patActions.length === 0) {
+        let publicPat = appData.lexicon.public?.patPat || {};
+        for (let g in publicPat) {
+            if (Array.isArray(publicPat[g])) {
+                for (let item of publicPat[g]) {
+                    if (item && item.trim() && typeof item === 'string') {
+                        patActions.push(item.trim());
+                    }
+                }
+            }
+        }
+    }
+    
+    // 如果都没有，使用默认值
     if (patActions.length === 0) {
         patActions = ["拍了拍", "戳了戳", "牵起了", "摸了摸"];
     }
     
     let patContent = patActions[Math.floor(Math.random() * patActions.length)];
     
+    // ===== 拍一拍符号：私人 → 全局 =====
     let symbol = "";
     if (fromSelf) {
         symbol = appData.chatSettings.myPatSymbol || "🤍";
     } else {
-        if (friendId && appData.friendChatSettings[friendId]) {
-            symbol = appData.friendChatSettings[friendId].otherPatSymbol || appData.chatSettings.otherPatSymbol || "🤍";
+        if (friendId && appData.friendChatSettings[friendId] && appData.friendChatSettings[friendId].otherPatSymbol) {
+            symbol = appData.friendChatSettings[friendId].otherPatSymbol;
         } else {
             symbol = appData.chatSettings.otherPatSymbol || "🤍";
         }
@@ -8986,14 +8989,16 @@ function sendPatMessage(sessionId, fromSelf = true) {
 function sendPatMessageWithSender(sessionId, fromSelf = true, senderInfo = null) {
     let session = appData.sessions.find(s => s.sessionId === sessionId);
     let friendId = null;
+    
+    // ===== 修复：群聊时用 senderInfo.id 作为 friendId =====
     if (session && session.type === "friend") {
         friendId = session.targetId;
+    } else if (session && session.type === "group" && senderInfo && senderInfo.id) {
+        friendId = senderInfo.id;
     }
+    
     let patText = getRandomPatMessage(fromSelf, friendId);
-    
-    // ===== 超过20字符强制换行 =====
     patText = wrapPatMessage(patText);
-    
     if (session && session.type === "group" && senderInfo) {
         sendMessage(sessionId, patText, false, senderInfo, true);
     } else {
