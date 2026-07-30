@@ -14347,7 +14347,34 @@ if (containerMsg) {
     isTypingShowing[session.sessionId] = false;
     startIdleTimer(session.sessionId);
     if (session.type === "friend") {
+    // ===== 新增：聊天期间周期性触发视频来电（2%概率） =====
+    // 清除之前可能存在的定时器
+    if (window._videoCallInterval) {
+        clearInterval(window._videoCallInterval);
+        window._videoCallInterval = null;
+    }
+
+    // 立即执行一次（保留原有逻辑）
     maybeIncomingVideoCall(session.sessionId, session.targetId);
+
+    // 每30秒检查一次，以2%概率触发
+    window._videoCallInterval = setInterval(() => {
+        // 如果聊天窗口已关闭，则清除定时器
+        if (!currentOpenChatWindow || currentOpenSessionId !== session.sessionId) {
+            clearInterval(window._videoCallInterval);
+            window._videoCallInterval = null;
+            return;
+        }
+        // 如果当前已有通话进行中，跳过
+        if (activeVideoCallContainer) {
+            return;
+        }
+        // 2%概率触发
+        if (Math.random() < 0.02) {
+            maybeIncomingVideoCall(session.sessionId, session.targetId);
+        }
+    }, 30000); // 每30秒检查一次
+
     maybeAddFriendDiary(session.targetId);
     maybeAddFriendMoment(session.targetId);
     maybeSendLetterFromFriend(session.targetId, session.sessionId);
@@ -14361,6 +14388,11 @@ if (containerMsg) {
     let backBtn = chatWin.querySelector(".back-btn");
 if (backBtn) {
     backBtn.onclick = () => {
+        // ===== 清理视频来电定时器 =====
+        if (window._videoCallInterval) {
+            clearInterval(window._videoCallInterval);
+            window._videoCallInterval = null;
+        }
         closeEmojiPanel();
         // 清除新消息气泡
         clearNewMsgBubble(session.sessionId);
