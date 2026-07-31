@@ -9764,7 +9764,6 @@ function makeVideoCall(sessionId, friendId) {
     let friend = appData.friends.find(f => f.id === friendId);
     if (!friend) return;
     
-    // 获取情侣空间昵称
     let space = getCoupleSpace(friendId);
     let displayName = space.enabled && space.nickname ? space.nickname : friend.name;
     
@@ -9773,6 +9772,7 @@ function makeVideoCall(sessionId, friendId) {
     let callDurationSeconds = 0;
     let isCallConnected = false;
     let isCallEnded = false;
+    let container = null; // 存储容器引用
     
     function formatDuration(seconds) {
         let h = Math.floor(seconds / 3600);
@@ -9785,8 +9785,19 @@ function makeVideoCall(sessionId, friendId) {
     }
     
     function endCall(container, reason, isConnected) {
-        if (isCallEnded) return;
-        isCallEnded = true;
+    if (isCallEnded) return;
+    isCallEnded = true;
+    
+    // ★ 新增：清理对方挂断定时器 ★
+    if (container && container._hangupInterval) {
+        clearInterval(container._hangupInterval);
+        container._hangupInterval = null;
+    }
+    
+    if (durationInterval) {
+        clearInterval(durationInterval);
+        durationInterval = null;
+    }
         
         if (durationInterval) {
             clearInterval(durationInterval);
@@ -9797,7 +9808,6 @@ function makeVideoCall(sessionId, friendId) {
         }
         activeVideoCallContainer = null;
         
-        // 根据原因发送不同消息（不加任何 emoji 标识）
         if (reason === 'connected' && isConnected) {
             let durationText = formatDuration(callDurationSeconds);
             sendMessage(sessionId, `与 ${displayName} 通话 ${durationText}`, true, null, false);
@@ -9887,7 +9897,6 @@ function makeVideoCall(sessionId, friendId) {
             }, 15000);
             container._connectTimeout = connectTimeout;
             
-            // 更新呼叫等待文字
             let statusDiv = container.querySelector("#callDuration");
             if (statusDiv) {
                 let dots = 0;
@@ -9902,13 +9911,17 @@ function makeVideoCall(sessionId, friendId) {
         return container;
     }
     
-    // 创建悬浮球
     function createFloatingBall(container) {
-        // 停止计时
-        if (durationInterval) {
-            clearInterval(durationInterval);
-            durationInterval = null;
-        }
+    // ★ 新增：清理对方挂断定时器 ★
+    if (container && container._hangupInterval) {
+        clearInterval(container._hangupInterval);
+        container._hangupInterval = null;
+    }
+    
+    if (durationInterval) {
+        clearInterval(durationInterval);
+        durationInterval = null;
+    }
         
         let ball = document.createElement("div");
         ball.className = "video-call-floating-ball";
@@ -9945,20 +9958,17 @@ function makeVideoCall(sessionId, friendId) {
             <div style="font-size:7px;color:#07c160;margin-top:1px;font-weight:500;">● 通话</div>
         `;
         
-        // 移除原容器
         if (container && container.parentElement) {
             container.remove();
         }
         activeVideoCallContainer = ball;
         document.body.appendChild(ball);
         
-        // 点击恢复
         ball.onclick = function(e) {
             e.stopPropagation();
             restoreFromFloatingBall(ball);
         };
         
-        // 拖拽
         let isDragging = false;
         let startX, startY, ballX, ballY;
         
@@ -10006,7 +10016,6 @@ function makeVideoCall(sessionId, friendId) {
             }
         }, { passive: true });
         
-        // 鼠标拖拽（PC）
         let isMouseDragging = false;
         let mouseStartX, mouseStartY, mouseBallX, mouseBallY;
         
@@ -10057,57 +10066,97 @@ function makeVideoCall(sessionId, friendId) {
     }
     
     function restoreFromFloatingBall(ball) {
-        if (!ball || !ball.parentElement) return;
-        ball.remove();
-        activeVideoCallContainer = null;
-        
-        // 重新创建通话窗口
-        let newContainer = createVideoContainer(false);
-        // 更新状态为已接通
-        isCallConnected = true;
-        let statusDiv = newContainer.querySelector("#callDuration");
-        if (statusDiv) {
-            statusDiv.innerText = '00:00';
-        }
-        if (newContainer._connectTimeout) {
-            clearTimeout(newContainer._connectTimeout);
-        }
-        if (newContainer._dotInterval) {
-            clearInterval(newContainer._dotInterval);
-        }
-        
-        // 重新绑定事件
-        let hangupBtn = newContainer.querySelector("#hangupCallBtn");
-        if (hangupBtn) {
-            hangupBtn.onclick = function() {
-                endCall(newContainer, 'self_hangup', true);
-            };
-        }
-        let minimizeBtn = newContainer.querySelector("#minimizeCallBtn");
-        if (minimizeBtn) {
-            minimizeBtn.onclick = function() {
-                createFloatingBall(newContainer);
-            };
-        }
-        
-        // 恢复计时
-        callDurationSeconds = Math.floor((Date.now() - callStartTime) / 1000);
-        durationInterval = setInterval(() => {
-            if (!activeVideoCallContainer) {
-                if (durationInterval) clearInterval(durationInterval);
-                return;
-            }
-            callDurationSeconds = Math.floor((Date.now() - callStartTime) / 1000);
-            let durationDiv = newContainer.querySelector("#callDuration");
-            if (durationDiv) {
-                durationDiv.innerText = formatDuration(callDurationSeconds);
-            }
-        }, 1000);
+    if (!ball || !ball.parentElement) return;
+    ball.remove();
+    activeVideoCallContainer = null;
+    
+    let newContainer = createVideoContainer(false);
+    isCallConnected = true;
+    let statusDiv = newContainer.querySelector("#callDuration");
+    if (statusDiv) {
+        statusDiv.innerText = '00:00';
     }
+    if (newContainer._connectTimeout) {
+        clearTimeout(newContainer._connectTimeout);
+    }
+    if (newContainer._dotInterval) {
+        clearInterval(newContainer._dotInterval);
+    }
+    
+    let hangupBtn = newContainer.querySelector("#hangupCallBtn");
+    if (hangupBtn) {
+        hangupBtn.onclick = function() {
+            endCall(newContainer, 'self_hangup', true);
+        };
+    }
+    let minimizeBtn = newContainer.querySelector("#minimizeCallBtn");
+    if (minimizeBtn) {
+        minimizeBtn.onclick = function() {
+            createFloatingBall(newContainer);
+        };
+    }
+    
+    callDurationSeconds = Math.floor((Date.now() - callStartTime) / 1000);
+    durationInterval = setInterval(() => {
+        if (!activeVideoCallContainer) {
+            if (durationInterval) clearInterval(durationInterval);
+            return;
+        }
+        callDurationSeconds = Math.floor((Date.now() - callStartTime) / 1000);
+        let durationDiv = newContainer.querySelector("#callDuration");
+        if (durationDiv) {
+            durationDiv.innerText = formatDuration(callDurationSeconds);
+        }
+    }, 1000);
+
+    // ★★★ 新增：重新启动对方挂断定时器 ★★★
+    if (newContainer._hangupInterval) {
+        clearInterval(newContainer._hangupInterval);
+    }
+    newContainer._hangupInterval = setInterval(function() {
+        if (isCallEnded || !activeVideoCallContainer) {
+            clearInterval(newContainer._hangupInterval);
+            newContainer._hangupInterval = null;
+            return;
+        }
+        if (Math.random() < 0.01) {
+            clearInterval(newContainer._hangupInterval);
+            newContainer._hangupInterval = null;
+            
+            isCallEnded = true;
+            if (durationInterval) {
+                clearInterval(durationInterval);
+                durationInterval = null;
+            }
+            
+            let statusDiv2 = newContainer.querySelector("#callDuration");
+            if (statusDiv2) {
+                statusDiv2.innerText = '对方挂断了通话';
+                statusDiv2.style.color = '#ff6b6b';
+            }
+            
+            let hangupBtn2 = newContainer.querySelector("#hangupCallBtn");
+            if (hangupBtn2) {
+                hangupBtn2.style.background = '#888';
+                hangupBtn2.style.cursor = 'default';
+                hangupBtn2.onclick = null;
+            }
+            
+            setTimeout(function() {
+                if (newContainer && newContainer.parentElement) {
+                    newContainer.remove();
+                }
+                activeVideoCallContainer = null;
+                let durationText = formatDuration(callDurationSeconds);
+                sendMessage(sessionId, `${displayName} 挂断了通话（${durationText}）`, true, null, false);
+            }, 1500);
+        }
+    }, 3600000);
+}
     
     // ---- 主流程 ----
     let result = Math.random();
-    let container = createVideoContainer(false);
+    container = createVideoContainer(false);
     
     // 接通逻辑
     setTimeout(() => {
@@ -10126,7 +10175,6 @@ function makeVideoCall(sessionId, friendId) {
                 statusDiv.innerText = '00:00';
             }
             
-            // 重新绑定按钮（因为可能被覆盖）
             let hangupBtn = container.querySelector("#hangupCallBtn");
             if (hangupBtn) {
                 hangupBtn.onclick = function() {
@@ -10140,7 +10188,6 @@ function makeVideoCall(sessionId, friendId) {
                 };
             }
             
-            // 启动计时
             callDurationSeconds = 0;
             durationInterval = setInterval(() => {
                 if (!activeVideoCallContainer) {
@@ -10157,6 +10204,52 @@ function makeVideoCall(sessionId, friendId) {
             sendMessage(sessionId, `${displayName} 接听了视频通话`, true, null, false);
             alert("通话已接通");
             
+            // ============================================================
+            // ★★★ 新增：对方挂断概率（接通后每隔 1 小时 1% 概率）★★★
+            // ============================================================
+            if (container._hangupInterval) {
+                clearInterval(container._hangupInterval);
+            }
+            container._hangupInterval = setInterval(function() {
+                if (isCallEnded || !activeVideoCallContainer) {
+                    clearInterval(container._hangupInterval);
+                    container._hangupInterval = null;
+                    return;
+                }
+                if (Math.random() < 0.01) {
+                    clearInterval(container._hangupInterval);
+                    container._hangupInterval = null;
+                    
+                    isCallEnded = true;
+                    if (durationInterval) {
+                        clearInterval(durationInterval);
+                        durationInterval = null;
+                    }
+                    
+                    let statusDiv2 = container.querySelector("#callDuration");
+                    if (statusDiv2) {
+                        statusDiv2.innerText = '对方挂断了通话';
+                        statusDiv2.style.color = '#ff6b6b';
+                    }
+                    
+                    let hangupBtn2 = container.querySelector("#hangupCallBtn");
+                    if (hangupBtn2) {
+                        hangupBtn2.style.background = '#888';
+                        hangupBtn2.style.cursor = 'default';
+                        hangupBtn2.onclick = null;
+                    }
+                    
+                    setTimeout(function() {
+                        if (container && container.parentElement) {
+                            container.remove();
+                        }
+                        activeVideoCallContainer = null;
+                        let durationText = formatDuration(callDurationSeconds);
+                        sendMessage(sessionId, `${displayName} 挂断了通话（${durationText}）`, true, null, false);
+                    }, 1500);
+                }
+            }, 3600000); // 1小时 = 3600000 毫秒
+            
         } else if (result < 0.8) {
             // 拒绝
             if (!isCallEnded) {
@@ -10167,7 +10260,6 @@ function makeVideoCall(sessionId, friendId) {
         // 否则无应答（已由 connectTimeout 处理）
     }, 2000);
     
-    // 挂断按钮（初始状态 - 取消拨出）
     let hangupBtn = container.querySelector("#hangupCallBtn");
     if (hangupBtn) {
         hangupBtn.onclick = function() {
