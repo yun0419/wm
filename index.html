@@ -20583,79 +20583,31 @@ function generateRandomQuestionnaire(sessionId, friendId) {
 
 // ==================== 数据导出功能 ====================
 function exportAllData() {
-    // 构建导出数据对象（包含所有数据）
+    // 直接导出整个 appData，永远不需要再手动添加字段
     var exportData = {
         version: "1.0",
         exportTime: new Date().toISOString(),
-        user: appData.user,
-        friends: appData.friends,
-        groups: appData.groups,
-        sessions: appData.sessions,
-        messages: appData.messages,
-        lexicon: appData.lexicon,
-        diaryEntries: appData.diaryEntries,
-        memoryEvents: appData.memoryEvents,
-        chatSettings: appData.chatSettings,
-        moments: appData.moments,
-        calendarEvents: appData.calendarEvents,
-        privateLexicon: appData.privateLexicon,
-        friendChatSettings: appData.friendChatSettings,
-        friendMoments: appData.friendMoments,
-        friendDiaries: appData.friendDiaries,
-        letters: appData.letters,
-        votes: appData.votes,
-        questionnaires: appData.questionnaires,
-        questionBank: appData.questionBank,
-        chatThemes: appData.chatThemes,
-        coupleSpaces: appData.coupleSpaces,
-        coupleMemories: appData.coupleMemories,
-        coupleImageCSS: appData.coupleImageCSS,
-        avatarFrames: appData.avatarFrames,
-        chatBubbles: appData.chatBubbles,
-        globalTheme: appData.globalTheme,
-        friendProfilePopupDate: appData.friendProfilePopupDate,
-        friendDiaryRedDot: appData.friendDiaryRedDot,
-        friendMomentRedDot: appData.friendMomentRedDot,
-        friendLetterRedDot: appData.friendLetterRedDot
+        appData: JSON.parse(JSON.stringify(appData))
     };
-    
-    // 转为 JSON 字符串
     var jsonStr = JSON.stringify(exportData, null, 2);
-    
-    // 创建下载链接
     var blob = new Blob([jsonStr], { type: "application/json" });
     var url = URL.createObjectURL(blob);
-    
-    // 生成文件名（包含日期时间）
     var now = new Date();
-    var dateStr = now.getFullYear() + "-" + 
-                  String(now.getMonth() + 1).padStart(2, "0") + "-" + 
-                  String(now.getDate()).padStart(2, "0") + "_" +
-                  String(now.getHours()).padStart(2, "0") + "-" +
-                  String(now.getMinutes()).padStart(2, "0");
+    var dateStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "_" + String(now.getHours()).padStart(2, "0") + "-" + String(now.getMinutes()).padStart(2, "0");
     var filename = "we_app_data_backup_" + dateStr + ".json";
-    
-    // 触发下载
     var a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    
-    // 释放 URL
-    setTimeout(function() {
-        URL.revokeObjectURL(url);
-    }, 1000);
-    
-    // 统计信息
+    setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
     var msgCount = 0;
     for (var sid in appData.messages) {
         if (appData.messages.hasOwnProperty(sid)) {
             msgCount += appData.messages[sid].length;
         }
     }
-    
     alert("✅ 数据导出成功！\n\n" +
           "📁 文件名：" + filename + "\n" +
           "📊 数据统计：\n" +
@@ -20673,50 +20625,91 @@ function exportChatLog() {
     var lines = [];
     var now = new Date();
     
-    // ===== 辅助函数：格式化时间 =====
     function formatTime(timeStr) {
         if (!timeStr) return "未知时间";
-        // 如果已经是 "2026/07/05 01:37:51" 格式，直接返回
-        if (timeStr.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/)) {
-            return timeStr;
-        }
-        // 尝试解析为 Date 对象
+        if (timeStr.match(/\d{4}\/\d{2}\/\d{2} \d{2}:\d{2}:\d{2}/)) return timeStr;
         var d = new Date(timeStr);
         if (!isNaN(d.getTime())) {
-            var year = d.getFullYear();
-            var month = String(d.getMonth() + 1).padStart(2, "0");
-            var day = String(d.getDate()).padStart(2, "0");
-            var hours = String(d.getHours()).padStart(2, "0");
-            var mins = String(d.getMinutes()).padStart(2, "0");
-            var secs = String(d.getSeconds()).padStart(2, "0");
-            return year + "/" + month + "/" + day + " " + hours + ":" + mins + ":" + secs;
+            return d.getFullYear() + "/" + String(d.getMonth()+1).padStart(2,"0") + "/" + String(d.getDate()).padStart(2,"0") + " " + String(d.getHours()).padStart(2,"0") + ":" + String(d.getMinutes()).padStart(2,"0") + ":" + String(d.getSeconds()).padStart(2,"0");
         }
         return timeStr || "未知时间";
     }
     
-    // ===== 辅助函数：截断文本 =====
-    function truncateText(text, maxLen) {
-        if (!text) return "";
-        if (text.length > maxLen) {
-            return text.substring(0, maxLen) + "...";
-        }
-        return text;
+    function safeString(val) {
+        if (val === null || val === undefined) return "";
+        if (typeof val === 'string') return val;
+        if (typeof val === 'number') return String(val);
+        if (typeof val === 'boolean') return val ? '是' : '否';
+        return JSON.stringify(val);
     }
     
-    // ===== 头部 =====
+    function generateAllSections() {
+        var sections = [];
+        var excludeKeys = ['messages', 'sessions'];
+        for (var key in appData) {
+            if (!appData.hasOwnProperty(key)) continue;
+            if (excludeKeys.indexOf(key) !== -1) continue;
+            var val = appData[key];
+            if (val === null || val === undefined) continue;
+            if (typeof val === 'function') continue;
+            if (typeof val === 'object') {
+                if (Array.isArray(val) && val.length === 0) continue;
+                if (!Array.isArray(val) && Object.keys(val).length === 0) continue;
+            }
+            if (typeof val === 'string' && !val.trim()) continue;
+            sections.push({ key: key, value: val });
+        }
+        return sections;
+    }
+    
+    var displayNameMap = {
+        'user': '👤 用户信息',
+        'myNickname': '📛 对我的称呼',
+        'friends': '👥 好友列表',
+        'groups': '👥 群聊列表',
+        'lexicon': '📚 公共词条库',
+        'privateLexicon': '📚 私人词条库',
+        'diaryEntries': '📖 我的日记',
+        'friendDiaries': '📖 好友日记',
+        'moments': '📱 我的朋友圈',
+        'friendMoments': '📱 好友朋友圈',
+        'letters': '✉️ 信件',
+        'votes': '📊 投票记录',
+        'questionnaires': '📋 问卷记录',
+        'questionBank': '📋 问卷题库',
+        'calendarEvents': '📅 日历事件',
+        'memoryEvents': '🎯 记·念',
+        'coupleSpaces': '💕 情侣空间',
+        'coupleMemories': '💕 情侣回忆',
+        'coupleImageCSS': '💕 图片样式',
+        'friendStatusCalendars': '🕐 时差状态日历',
+        'friendDiaryRedDot': '🔴 日记红点',
+        'friendMomentRedDot': '🔴 朋友圈红点',
+        'friendLetterRedDot': '🔴 信件红点',
+        'friendBirthdayRedDot': '🎂 生日红点',
+        'friendAnniversaryRedDot': '💕 周年红点',
+        'friendQuestionnaireRedDot': '🔴 问卷红点',
+        'friendProfilePopupDate': '📅 个人主页记录',
+        'chatSettings': '⚙️ 聊天设置',
+        'friendChatSettings': '⚙️ 好友聊天设置',
+        'avatarFrames': '🖼️ 头像框',
+        'chatBubbles': '💬 气泡',
+        'globalTheme': '🎨 全局主题',
+        'chatThemes': '🎨 聊天主题'
+    };
+    
     lines.push("╔══════════════════════════════════════════════════════════╗");
     lines.push("║              📱 我们 - 完整数据档案                     ║");
     lines.push("╚══════════════════════════════════════════════════════════╝");
     lines.push("");
     lines.push("📅 导出时间：" + now.toLocaleString());
     lines.push("👤 用户名：" + (appData.user ? appData.user.name : "未设置"));
+    lines.push("📦 版本：动态全量导出（包含所有字段）");
     lines.push("");
     lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
     lines.push("");
     
-    // ============================================================
     // 1. 聊天记录
-    // ============================================================
     lines.push("╔══════════════════════════════════════════════════════════╗");
     lines.push("║                    💬 聊天记录                          ║");
     lines.push("╚══════════════════════════════════════════════════════════╝");
@@ -20724,15 +20717,12 @@ function exportChatLog() {
     
     var totalMsgs = 0;
     var sessionCount = 0;
-    
-    // 按会话名称排序
     var sessionIds = [];
     for (var sid in appData.messages) {
         if (appData.messages.hasOwnProperty(sid) && appData.messages[sid].length > 0) {
             sessionIds.push(sid);
         }
     }
-    // 按会话名称排序
     sessionIds.sort(function(a, b) {
         var sa = appData.sessions.find(function(s) { return s.sessionId === a; });
         var sb = appData.sessions.find(function(s) { return s.sessionId === b; });
@@ -20745,544 +20735,95 @@ function exportChatLog() {
         var sid = sessionIds[si];
         var msgs = appData.messages[sid];
         if (!msgs || msgs.length === 0) continue;
-        
         var session = appData.sessions.find(function(s) { return s.sessionId === sid; });
         var name = session ? session.name : sid;
         totalMsgs += msgs.length;
         sessionCount++;
-        
-        lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        lines.push("💬 " + name + "（" + msgs.length + "条消息）");
-        lines.push("━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━");
-        lines.push("");
-        
+        lines.push("━━━ " + name + "（" + msgs.length + "条消息）━━━");
         for (var i = 0; i < msgs.length; i++) {
             var m = msgs[i];
             var from = (m.from === "self") ? "👤 我" : (m.senderName || "👤 对方");
             var time = formatTime(m.time);
             var text = "";
-            
-            if (m.isVote) {
-                text = "📊 [投票] " + (m.title || "");
-            } else if (m.isQuestionnaire) {
-                var q = appData.questionnaires ? appData.questionnaires[m.questionnaireId] : null;
-                text = "📄 [问卷] " + (q ? q.title : "");
-            } else if (m.isPat) {
-                text = "👏 " + (m.text || "");
-            } else if (m.text && m.text.startsWith("data:image")) {
-                text = "🖼️ [图片]";
-            } else if (m.text && m.text.startsWith("data:audio")) {
-                text = "🎵 [语音]";
-            } else if (m.text && m.text.startsWith("data:video")) {
-                text = "🎬 [视频]";
+            if (m.isVote) text = "📊 [投票] " + (m.title || "");
+            else if (m.isQuestionnaire) { var q = appData.questionnaires ? appData.questionnaires[m.questionnaireId] : null; text = "📄 [问卷] " + (q ? q.title : ""); }
+            else if (m.isPat) text = "👏 " + (m.text || "");
+            else if (m.text && m.text.startsWith("data:image")) text = "🖼️ [图片]";
+            else if (m.text && m.text.startsWith("data:audio")) text = "🎵 [语音]";
+            else if (m.text && m.text.startsWith("data:video")) text = "🎬 [视频]";
+            else text = m.text || "[消息]";
+            lines.push("  " + time + "  " + from + "：" + text);
+        }
+        lines.push("");
+    }
+    if (sessionCount === 0) lines.push("  📭 暂无聊天记录\n");
+    
+    // 2. 动态生成所有其他数据
+    var sections = generateAllSections();
+    for (var si = 0; si < sections.length; si++) {
+        var sec = sections[si];
+        var key = sec.key;
+        var val = sec.value;
+        var displayName = displayNameMap[key] || '📦 ' + key;
+        
+        lines.push("╔══════════════════════════════════════════════════════════╗");
+        lines.push("║                    " + displayName.padEnd(50) + "║");
+        lines.push("╚══════════════════════════════════════════════════════════╝");
+        lines.push("");
+        
+        if (Array.isArray(val)) {
+            if (val.length === 0) {
+                lines.push("  📭 暂无数据");
             } else {
-                text = m.text || "";
-            }
-            
-            // 如果有引用
-            if (m.replyTo) {
-                var replyPreview = m.replyTo.contentPreview || "";
-                if (m.replyTo.isImage) replyPreview = "[图片]";
-                text = "📎 引用 " + m.replyTo.senderName + "：" + replyPreview + "\n    └─ " + text;
-            }
-            
-            // 如果消息为空（可能是其他类型），补一个占位
-            if (!text && !m.isVote && !m.isQuestionnaire && !m.isPat) {
-                text = "[消息]";
-            }
-            
-            lines.push("  " + time);
-            lines.push("  " + from + "：" + text);
-            lines.push("");
-        }
-        lines.push("");
-    }
-    
-    if (sessionCount === 0) {
-        lines.push("  📭 暂无聊天记录");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 2. 我的朋友圈
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📱 我的朋友圈                        ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var moments = appData.moments || [];
-    if (moments.length === 0) {
-        lines.push("  📭 暂无朋友圈");
-        lines.push("");
-    } else {
-        // 按时间倒序
-        var sortedMoments = moments.slice().sort(function(a, b) {
-            return new Date(b.time) - new Date(a.time);
-        });
-        for (var i = 0; i < sortedMoments.length; i++) {
-            var m = sortedMoments[i];
-            lines.push("  📅 " + formatTime(m.time));
-            if (m.text) lines.push("  " + m.text);
-            if (m.images && m.images.length) {
-                lines.push("  📷 图片 " + m.images.length + " 张");
-            }
-            if (m.comments && m.comments.length) {
-                lines.push("  💬 评论：");
-                for (var c = 0; c < m.comments.length; c++) {
-                    lines.push("    " + m.comments[c].name + "：" + m.comments[c].text);
-                }
-            }
-            lines.push("");
-        }
-    }
-    
-    // ============================================================
-    // 3. 好友朋友圈
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║              👥 好友朋友圈                            ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var friendMoments = appData.friendMoments || {};
-    var hasFriendMoments = false;
-    var friendIds = Object.keys(friendMoments).sort();
-    for (var fi = 0; fi < friendIds.length; fi++) {
-        var fid = friendIds[fi];
-        var list = friendMoments[fid];
-        if (list && list.length > 0) {
-            hasFriendMoments = true;
-            var friend = appData.friends.find(function(f) { return f.id === fid; });
-            var fname = friend ? friend.name : fid;
-            lines.push("━━━ " + fname + " ━━━");
-            // 按时间倒序
-            var sorted = list.slice().sort(function(a, b) {
-                return new Date(b.time) - new Date(a.time);
-            });
-            for (var i = 0; i < sorted.length; i++) {
-                var m = sorted[i];
-                lines.push("  📅 " + formatTime(m.time));
-                if (m.text) lines.push("  " + m.text);
-                if (m.images && m.images.length) {
-                    lines.push("  📷 图片 " + m.images.length + " 张");
-                }
-                if (m.comments && m.comments.length) {
-                    lines.push("  💬 评论：");
-                    for (var c = 0; c < m.comments.length; c++) {
-                        var cmt = m.comments[c];
-                        var cname = cmt.from === "self" ? "我" : (cmt.name || "好友");
-                        lines.push("    " + cname + "：" + cmt.text);
-                    }
-                }
-                lines.push("");
-            }
-        }
-    }
-    if (!hasFriendMoments) {
-        lines.push("  📭 暂无好友朋友圈");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 4. 我的日记
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📖 我的日记                          ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var diaries = appData.diaryEntries || [];
-    if (diaries.length === 0) {
-        lines.push("  📭 暂无日记");
-        lines.push("");
-    } else {
-        var sortedDiaries = diaries.slice().sort(function(a, b) {
-            return new Date(b.date) - new Date(a.date);
-        });
-        for (var i = 0; i < sortedDiaries.length; i++) {
-            var d = sortedDiaries[i];
-            lines.push("  📅 " + (d.date || "未知日期"));
-            lines.push("  " + (d.content || ""));
-            if (d.comments && d.comments.length) {
-                lines.push("  💬 评论：");
-                for (var c = 0; c < d.comments.length; c++) {
-                    var cmt = d.comments[c];
-                    var cname = cmt.from === "self" ? "我" : "好友";
-                    lines.push("    " + cname + "：" + cmt.text);
-                }
-            }
-            lines.push("");
-        }
-    }
-    
-    // ============================================================
-    // 5. 好友日记
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║              👥 好友日记                              ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var friendDiaries = appData.friendDiaries || {};
-    var hasFriendDiaries = false;
-    var diaryFriendIds = Object.keys(friendDiaries).sort();
-    for (var fi = 0; fi < diaryFriendIds.length; fi++) {
-        var fid = diaryFriendIds[fi];
-        var list = friendDiaries[fid];
-        if (list && list.length > 0) {
-            hasFriendDiaries = true;
-            var friend = appData.friends.find(function(f) { return f.id === fid; });
-            var fname = friend ? friend.name : fid;
-            lines.push("━━━ " + fname + " ━━━");
-            var sorted = list.slice().sort(function(a, b) {
-                return new Date(b.date) - new Date(a.date);
-            });
-            for (var i = 0; i < sorted.length; i++) {
-                var d = sorted[i];
-                lines.push("  📅 " + (d.date || "未知日期"));
-                lines.push("  " + (d.content || ""));
-                if (d.comments && d.comments.length) {
-                    lines.push("  💬 评论：");
-                    for (var c = 0; c < d.comments.length; c++) {
-                        var cmt = d.comments[c];
-                        var cname = cmt.from === "self" ? "我" : "好友";
-                        lines.push("    " + cname + "：" + cmt.text);
-                    }
-                }
-                lines.push("");
-            }
-        }
-    }
-    if (!hasFriendDiaries) {
-        lines.push("  📭 暂无好友日记");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 6. 信件
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    ✉️ 信件                            ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var letters = appData.letters || {};
-    var hasLetters = false;
-    var letterFriendIds = Object.keys(letters).sort();
-    for (var fi = 0; fi < letterFriendIds.length; fi++) {
-        var fid = letterFriendIds[fi];
-        var list = letters[fid];
-        if (list && list.length > 0) {
-            hasLetters = true;
-            var friend = appData.friends.find(function(f) { return f.id === fid; });
-            var fname = friend ? friend.name : fid;
-            lines.push("━━━ " + fname + " ━━━");
-            var sorted = list.slice().sort(function(a, b) {
-                return new Date(a.time) - new Date(b.time);
-            });
-            for (var i = 0; i < sorted.length; i++) {
-                var l = sorted[i];
-                var direction = (l.direction === "my" || l.from === "self") ? "📤 我 → " + fname : "📨 " + fname + " → 我";
-                lines.push("  " + direction);
-                lines.push("  📅 " + formatTime(l.time));
-                lines.push("  📝 " + (l.content || ""));
-                if (l.reply) {
-                    lines.push("  📬 回信：" + l.reply);
-                    if (l.replyTime) lines.push("  📅 回信时间：" + formatTime(l.replyTime));
-                } else if (l.expectedReplyTimestamp) {
-                    var remaining = l.expectedReplyTimestamp - Date.now();
-                    if (remaining > 0) {
-                        var hours = Math.floor(remaining / (1000 * 60 * 60));
-                        lines.push("  ⏳ 预计 " + hours + " 小时后回信");
-                    } else {
-                        lines.push("  ⏳ 即将回信");
-                    }
-                }
-                lines.push("");
-            }
-        }
-    }
-    if (!hasLetters) {
-        lines.push("  📭 暂无信件");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 7. 情侣空间
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    💕 情侣空间                          ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var coupleSpaces = appData.coupleSpaces || {};
-    var hasCouple = false;
-    var coupleFriendIds = Object.keys(coupleSpaces).sort();
-    for (var fi = 0; fi < coupleFriendIds.length; fi++) {
-        var fid = coupleFriendIds[fi];
-        var space = coupleSpaces[fid];
-        if (space && space.enabled) {
-            hasCouple = true;
-            var friend = appData.friends.find(function(f) { return f.id === fid; });
-            var fname = friend ? friend.name : fid;
-            lines.push("  💕 与 " + fname);
-            lines.push("  📛 昵称：" + (space.nickname || "未设置"));
-            lines.push("  📅 开始日期：" + (space.startDate || "未知"));
-            if (space.startDate) {
-                var days = calcDays(space.startDate);
-                lines.push("  📊 在一起 " + days + " 天");
-            }
-            lines.push("");
-            
-            // 情侣回忆
-            var memories = (appData.coupleMemories && appData.coupleMemories[fid]) || [];
-            if (memories.length > 0) {
-                lines.push("  📸 我们的回忆：");
-                var sortedMem = memories.slice().sort(function(a, b) {
-                    return new Date(b.time) - new Date(a.time);
-                });
-                for (var i = 0; i < sortedMem.length; i++) {
-                    var m = sortedMem[i];
-                    lines.push("    📅 " + formatTime(m.time));
-                    if (m.text) lines.push("    💭 " + m.text);
-                    if (m.caption) lines.push("    ✨ " + m.caption);
-                    if (m.image) lines.push("    🖼️ [图片]");
-                    if (m.comments && m.comments.length) {
-                        lines.push("    💬 评论：");
-                        for (var c = 0; c < m.comments.length; c++) {
-                            var cmt = m.comments[c];
-                            var cname = cmt.from === "self" ? "我" : fname;
-                            lines.push("      " + cname + "：" + cmt.text);
+                for (var i = 0; i < Math.min(val.length, 100); i++) {
+                    var item = val[i];
+                    if (typeof item === 'object' && item !== null) {
+                        var parts = [];
+                        for (var k in item) {
+                            if (item.hasOwnProperty(k)) {
+                                var v = safeString(item[k]);
+                                if (v && v.length > 50) v = v.substring(0, 50) + "...";
+                                if (typeof item[k] === 'string' && item[k].startsWith('data:image')) v = '[图片数据]';
+                                parts.push(k + '=' + v);
+                            }
                         }
+                        lines.push("  " + (i+1) + ". " + parts.join(', '));
+                    } else {
+                        var str = safeString(item);
+                        if (str && str.startsWith('data:image')) str = '[图片数据]';
+                        lines.push("  " + (i+1) + ". " + str);
                     }
-                    lines.push("");
+                }
+                if (val.length > 100) {
+                    lines.push("  ... 共 " + val.length + " 项，仅显示前100项");
                 }
             }
-        }
-    }
-    if (!hasCouple) {
-        lines.push("  💔 未开启情侣空间");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 8. 词条库
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📚 词条库                            ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var lexicon = appData.lexicon || {};
-    var publicLex = lexicon.public || {};
-    var hasLexicon = false;
-    var catNames = {
-        "wordCards": "字卡",
-        "emojis": "表情包",
-        "kaomojis": "颜文字",
-        "emoji": "Emoji",
-        "patPat": "拍一拍",
-        "weather": "天气",
-        "status": "状态"
-    };
-    
-    lines.push("  📖 公共词条库：");
-    var catOrder = ["wordCards", "emojis", "kaomojis", "emoji", "patPat", "weather", "status"];
-    for (var ci = 0; ci < catOrder.length; ci++) {
-        var cat = catOrder[ci];
-        var groups = publicLex[cat] || {};
-        for (var g in groups) {
-            if (!groups.hasOwnProperty(g)) continue;
-            var items = groups[g];
-            if (items && items.length > 0) {
-                hasLexicon = true;
-                var catName = catNames[cat] || cat;
-                lines.push("    " + catName + " / " + g + "：" + items.join("、"));
-            }
-        }
-    }
-    if (!hasLexicon) {
-        lines.push("    📭 暂无公共词条");
-    }
-    lines.push("");
-    
-    // 私人词条库
-    var privateLex = appData.privateLexicon || {};
-    var hasPrivate = false;
-    var privFriendIds = Object.keys(privateLex).sort();
-    for (var fi = 0; fi < privFriendIds.length; fi++) {
-        var fid = privFriendIds[fi];
-        var priv = privateLex[fid];
-        if (!priv) continue;
-        var friend = appData.friends.find(function(f) { return f.id === fid; });
-        var fname = friend ? friend.name : fid;
-        var hasItems = false;
-        var itemsList = [];
-        for (var ci = 0; ci < catOrder.length; ci++) {
-            var cat = catOrder[ci];
-            var groups = priv[cat] || {};
-            for (var g in groups) {
-                if (!groups.hasOwnProperty(g)) continue;
-                var items = groups[g];
-                if (items && items.length > 0) {
-                    hasItems = true;
-                    var catName = catNames[cat] || cat;
-                    itemsList.push(catName + "：" + items.join("、"));
+        } else if (typeof val === 'object' && val !== null) {
+            var keys = Object.keys(val);
+            if (keys.length === 0) {
+                lines.push("  📭 暂无数据");
+            } else {
+                var count = 0;
+                for (var k in val) {
+                    if (!val.hasOwnProperty(k)) continue;
+                    count++;
+                    if (count > 100) { lines.push("  ... 共 " + keys.length + " 项，仅显示前100项"); break; }
+                    var v = val[k];
+                    var str = safeString(v);
+                    if (str && str.startsWith('data:image')) str = '[图片数据]';
+                    if (str.length > 80) str = str.substring(0, 80) + "...";
+                    lines.push("  " + k + "：" + str);
                 }
             }
+        } else {
+            var str = safeString(val);
+            if (str && str.startsWith('data:image')) str = '[图片数据]';
+            lines.push("  " + str);
         }
-        if (hasItems) {
-            hasPrivate = true;
-            if (!hasLexicon) {
-                lines.push("  📖 私人词条库：");
-                hasLexicon = true;
-            }
-            lines.push("    👤 " + fname + "：");
-            for (var i = 0; i < itemsList.length; i++) {
-                lines.push("      " + itemsList[i]);
-            }
-        }
-    }
-    if (!hasPrivate && !hasLexicon) {
-        lines.push("  📭 暂无私人词条");
-    }
-    lines.push("");
-    
-    // ============================================================
-    // 9. 记·念
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    🎯 记·念                            ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var memoryEvents = appData.memoryEvents || [];
-    if (memoryEvents.length === 0) {
-        lines.push("  📭 暂无记录");
-        lines.push("");
-    } else {
-        for (var i = 0; i < memoryEvents.length; i++) {
-            var e = memoryEvents[i];
-            var typeLabel = (e.type === "past") ? "📅 已过" : "🔮 未来";
-            var days = (e.type === "past") ? calcDays(e.date) : calcDaysFuture(e.date);
-            var dayLabel = (e.type === "past") ? "已过" : "还剩";
-            lines.push("  " + typeLabel + " " + e.title);
-            lines.push("  📅 " + e.date + "（" + dayLabel + " " + days + " 天）");
-            lines.push("");
-        }
-    }
-    
-    // ============================================================
-    // 10. 日历事件
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📅 日历事件                          ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var calendarEvents = appData.calendarEvents || {};
-    var hasCalendar = false;
-    var calDates = Object.keys(calendarEvents).sort();
-    for (var ci = 0; ci < calDates.length; ci++) {
-        var date = calDates[ci];
-        var events = calendarEvents[date];
-        if (events && events.length > 0) {
-            hasCalendar = true;
-            lines.push("  📅 " + date);
-            for (var i = 0; i < events.length; i++) {
-                var e = events[i];
-                lines.push("    " + (e.type || "事件") + "：" + e.title + (e.note ? "（" + e.note + "）" : ""));
-            }
-            lines.push("");
-        }
-    }
-    if (!hasCalendar) {
-        lines.push("  📭 暂无日历事件");
         lines.push("");
     }
     
-    // ============================================================
-    // 11. 投票记录
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📊 投票记录                          ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var votes = appData.votes || {};
-    var hasVotes = false;
-    for (var vid in votes) {
-        if (!votes.hasOwnProperty(vid)) continue;
-        var v = votes[vid];
-        if (v) {
-            hasVotes = true;
-            lines.push("  📊 " + (v.title || "未命名投票"));
-            lines.push("  📅 结束时间：" + (v.endTime ? new Date(v.endTime).toLocaleString() : "未知"));
-            lines.push("  📈 结果：");
-            var total = 0;
-            for (var i = 0; i < v.votes.length; i++) {
-                total += v.votes[i];
-            }
-            for (var i = 0; i < v.options.length; i++) {
-                var pct = total > 0 ? Math.round(v.votes[i] / total * 100) : 0;
-                lines.push("    " + v.options[i] + "：" + v.votes[i] + " 票（" + pct + "%）");
-            }
-            lines.push("");
-        }
-    }
-    if (!hasVotes) {
-        lines.push("  📭 暂无投票记录");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 12. 问卷记录
-    // ============================================================
-    lines.push("╔══════════════════════════════════════════════════════════╗");
-    lines.push("║                    📋 问卷记录                          ║");
-    lines.push("╚══════════════════════════════════════════════════════════╝");
-    lines.push("");
-    
-    var questionnaires = appData.questionnaires || {};
-    var hasQ = false;
-    var qIds = Object.keys(questionnaires).sort();
-    for (var qi = 0; qi < qIds.length; qi++) {
-        var qid = qIds[qi];
-        var q = questionnaires[qid];
-        if (q) {
-            hasQ = true;
-            var friend = appData.friends.find(function(f) { return f.id === q.friendId; });
-            var fname = friend ? friend.name : "对方";
-            var statusMap = {
-                "pending": "⏳ 待回答",
-                "answering": "📝 回答中",
-                "completed": "✅ 已完成"
-            };
-            lines.push("  📋 " + q.title);
-            lines.push("  👤 " + fname + " · " + (statusMap[q.status] || q.status));
-            lines.push("  📅 " + new Date(q.createdAt).toLocaleString());
-            if (q.questions) {
-                lines.push("  📝 共 " + q.questions.length + " 道题");
-                for (var i = 0; i < q.questions.length; i++) {
-                    var qItem = q.questions[i];
-                    var answer = q.answers ? q.answers[qItem.id] : undefined;
-                    var isAnswered = (answer !== undefined && answer !== null && answer !== "");
-                    var answerText = isAnswered ? "✅ 已作答" : "⬜ 未作答";
-                    lines.push("    " + (i+1) + ". " + qItem.text + "（" + answerText + "）");
-                }
-            }
-            lines.push("");
-        }
-    }
-    if (!hasQ) {
-        lines.push("  📭 暂无问卷记录");
-        lines.push("");
-    }
-    
-    // ============================================================
-    // 统计信息
-    // ============================================================
+    // 统计
     lines.push("╔══════════════════════════════════════════════════════════╗");
     lines.push("║                    📊 统计总览                          ║");
     lines.push("╚══════════════════════════════════════════════════════════╝");
@@ -21297,112 +20838,126 @@ function exportChatLog() {
     lines.push("  💕 情侣空间：" + (function() { var c = 0; for (var k in appData.coupleSpaces) { if (appData.coupleSpaces.hasOwnProperty(k) && appData.coupleSpaces[k].enabled) c++; } return c; })());
     lines.push("  📊 投票：" + Object.keys(appData.votes || {}).length);
     lines.push("  📋 问卷：" + Object.keys(appData.questionnaires || {}).length);
+    lines.push("  🕐 时差状态记录天数：" + (function() { var c = 0; for (var k in appData.friendStatusCalendars) { if (appData.friendStatusCalendars.hasOwnProperty(k)) c += Object.keys(appData.friendStatusCalendars[k]).length; } return c; })());
     lines.push("");
     lines.push("╔══════════════════════════════════════════════════════════╗");
     lines.push("║              📄 导出完成 · 感谢使用                    ║");
     lines.push("╚══════════════════════════════════════════════════════════╝");
     
-    // ===== 下载 =====
     var textContent = lines.join("\n");
     var blob = new Blob([textContent], { type: "text/plain;charset=utf-8" });
     var url = URL.createObjectURL(blob);
-    
-    var dateStr = now.getFullYear() + "-" + 
-                  String(now.getMonth() + 1).padStart(2, "0") + "-" + 
-                  String(now.getDate()).padStart(2, "0") + "_" +
-                  String(now.getHours()).padStart(2, "0") + "-" +
-                  String(now.getMinutes()).padStart(2, "0");
+    var dateStr = now.getFullYear() + "-" + String(now.getMonth() + 1).padStart(2, "0") + "-" + String(now.getDate()).padStart(2, "0") + "_" + String(now.getHours()).padStart(2, "0") + "-" + String(now.getMinutes()).padStart(2, "0");
     var filename = "完整数据档案_" + dateStr + ".txt";
-    
     var a = document.createElement("a");
     a.href = url;
     a.download = filename;
     document.body.appendChild(a);
     a.click();
     document.body.removeChild(a);
-    
     setTimeout(function() { URL.revokeObjectURL(url); }, 1000);
-    
-    alert("✅ 完整数据档案导出成功！\n\n📁 文件名：" + filename + "\n📄 用记事本打开即可阅读\n\n📊 包含：聊天记录、朋友圈、日记、信件、情侣空间、词条库、记·念、日历、投票、问卷");
+    alert("✅ 完整数据档案导出成功！\n\n📁 文件名：" + filename + "\n📄 用记事本打开即可阅读\n\n📊 包含所有数据字段，未来新增功能也会自动包含。");
 }
 
 function importAllData() {
     var input = document.createElement("input");
     input.type = "file";
     input.accept = ".json";
-    
     input.onchange = function(e) {
         var file = e.target.files[0];
         if (!file) return;
-        
         var reader = new FileReader();
         reader.onload = function(ev) {
             try {
                 var importedData = JSON.parse(ev.target.result);
-                
-                if (!importedData.version || !importedData.user) {
+                if (!importedData.version || !importedData.appData) {
                     showImportResultModal("❌ 无效的备份文件，请检查文件格式", "error");
                     return;
                 }
-                
                 var confirmMsg = "⚠️ 导入将覆盖当前所有数据！\n\n";
+                var data = importedData.appData;
                 confirmMsg += "📊 备份文件包含：\n";
-                confirmMsg += "  • 好友：" + (importedData.friends ? importedData.friends.length : 0) + " 人\n";
-                confirmMsg += "  • 群聊：" + (importedData.groups ? importedData.groups.length : 0) + " 个\n";
-                
+                confirmMsg += "  • 好友：" + (data.friends ? data.friends.length : 0) + " 人\n";
+                confirmMsg += "  • 群聊：" + (data.groups ? data.groups.length : 0) + " 个\n";
                 var msgCount = 0;
-                if (importedData.messages) {
-                    for (var sid in importedData.messages) {
-                        if (importedData.messages.hasOwnProperty(sid)) {
-                            msgCount += importedData.messages[sid].length;
+                if (data.messages) {
+                    for (var sid in data.messages) {
+                        if (data.messages.hasOwnProperty(sid)) {
+                            msgCount += data.messages[sid].length;
                         }
                     }
                 }
                 confirmMsg += "  • 消息：" + msgCount + " 条\n";
-                confirmMsg += "  • 日记：" + (importedData.diaryEntries ? importedData.diaryEntries.length : 0) + " 篇\n";
-                confirmMsg += "  • 朋友圈：" + (importedData.moments ? importedData.moments.length : 0) + " 条\n";
-                confirmMsg += "  • 问卷：" + (importedData.questionnaires ? Object.keys(importedData.questionnaires).length : 0) + " 份\n";
-                confirmMsg += "  • 信件：" + (importedData.letters ? Object.keys(importedData.letters).length : 0) + " 位好友的信件\n\n";
+                confirmMsg += "  • 日记：" + (data.diaryEntries ? data.diaryEntries.length : 0) + " 篇\n";
+                confirmMsg += "  • 朋友圈：" + (data.moments ? data.moments.length : 0) + " 条\n";
+                confirmMsg += "  • 问卷：" + (data.questionnaires ? Object.keys(data.questionnaires).length : 0) + " 份\n";
+                confirmMsg += "  • 信件：" + (data.letters ? Object.keys(data.letters).length : 0) + " 位好友的信件\n";
+                confirmMsg += "  • 情侣空间：" + (data.coupleSpaces ? Object.keys(data.coupleSpaces).length : 0) + " 个\n";
+                confirmMsg += "  • 时差状态：" + (data.friendStatusCalendars ? Object.keys(data.friendStatusCalendars).length : 0) + " 位好友有记录\n\n";
                 confirmMsg += "⚠️ 此操作将覆盖当前所有数据，不可撤销！\n\n确定继续吗？";
-                
                 if (!confirm(confirmMsg)) return;
-                
-                for (var key in importedData) {
-                    if (importedData.hasOwnProperty(key) && key !== "version" && key !== "exportTime") {
-                        appData[key] = importedData[key];
+                // 直接覆盖整个 appData
+                for (var key in data) {
+                    if (data.hasOwnProperty(key)) {
+                        appData[key] = data[key];
                     }
                 }
-                
+                // 补全基础字段（防止导入旧版数据缺少字段）
+                if (!appData.lexicon) appData.lexicon = { public: {} };
+                if (!appData.lexicon.public) appData.lexicon.public = {};
+                if (!appData.chatSettings) {
+                    appData.chatSettings = {
+                        typingIndicator: true,
+                        showTime: true,
+                        enableCombine: true,
+                        replyDelayMin: 30000,
+                        replyDelayMax: 120000,
+                        consecutiveReplyMin: 5000,
+                        consecutiveReplyMax: 60000,
+                        myPatSymbol: "🤍",
+                        otherPatSymbol: "🤍",
+                        patProbability: 30,
+                        videoCallProb: 2,
+                        replyWithQuoteProb: 40
+                    };
+                }
+                if (!appData.globalTheme) {
+                    appData.globalTheme = {
+                        bgColor: "#ffffff",
+                        bgImage: null,
+                        bgOpacity: 100,
+                        fontFamily: "",
+                        fontSize: 14,
+                        followSystemFont: true,
+                        headerBgColor: "rgba(255,255,255,1)",
+                        tabbarBgColor: "rgba(255,255,255,1)"
+                    };
+                }
+                if (!appData.friendChatSettings) appData.friendChatSettings = {};
+                if (!appData.friendStatusCalendars) appData.friendStatusCalendars = {};
                 saveData();
                 buildSessionsFromData();
                 restoreVoteTimers();
-startLetterCheckLoop();
-applyGlobalTheme();
-// 启动主动消息调度器
-startAutoMessageScheduler();
-renderCurrentPage();
-attachDynamicEvents();
-                
+                startLetterCheckLoop();
+                applyGlobalTheme();
+                startAutoMessageScheduler();
+                renderCurrentPage();
+                attachDynamicEvents();
                 var successMsg = "✅ 数据导入成功！\n\n" +
                       "📅 备份时间：" + (importedData.exportTime || "未知") + "\n" +
                       "📦 版本：" + (importedData.version || "1.0") + "\n\n" +
-                      "🔄 页面已刷新，请查看数据恢复情况。";
-                
+                      "🔄 所有数据已完整恢复，包含所有字段。";
                 showImportResultModal(successMsg, "success");
-                
             } catch (err) {
                 showImportResultModal("❌ 导入失败：文件格式错误或已损坏\n\n" + err.message, "error");
                 console.error("导入错误:", err);
             }
         };
-        
         reader.onerror = function() {
             showImportResultModal("❌ 读取文件失败，请重试", "error");
         };
-        
         reader.readAsText(file);
     };
-    
     input.click();
 }
 
