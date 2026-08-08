@@ -9332,12 +9332,13 @@ if (!fromSelf && !isPat && !isVote && !isQuestionnaire) {
                         }
                         currentMsgs.splice(msgIndex, 1);
                         
-                        let space = getCoupleSpace(capturedFriendId);
-                        let nickname = space && space.enabled && space.nickname ? space.nickname : '对方';
+                        // ✅ 读取自定义撤回文案
+                        let recallSettings2 = getFriendRecallSettings(capturedFriendId);
+                        let recallText = recallSettings2.otherRecallText || '对方撤回了';
                         
                         let systemMsg = {
                             id: 'recall_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                            text: nickname + '撤回了一条消息',
+                            text: recallText,   // ← 使用自定义文案
                             time: new Date().toLocaleString(),
                             from: 'system',
                             timestamp: Date.now(),
@@ -9559,7 +9560,7 @@ if (Math.random() < 0.01) {
     
     if (lastMyMsg && lastMyMsg.text) {
         let myNickname = appData.myNickname || "宝宝";
-        let msgText = `【${myNickname}】，想要把这句话添加字卡`;
+        let msgText = `${myNickname}，想要把这句话添加字卡`;
         
         let quoteReplyTo = {
             msgId: lastMyMsg.id,
@@ -9676,7 +9677,7 @@ if (Math.random() < 0.01) {
     
     if (lastMyMsg && lastMyMsg.text) {
         let myNickname = appData.myNickname || "宝宝";
-        let msgText = `【${myNickname}】，想要把这句话添加字卡`;
+        let msgText = `${myNickname}，想要把这句话添加字卡`;
         
         let quoteReplyTo = {
             msgId: lastMyMsg.id,
@@ -9963,7 +9964,7 @@ function makeVideoCall(sessionId, friendId) {
                     endCall(container, 'noanswer', false);
                     alert(`${displayName} 无应答`);
                 }
-            }, 15000);
+            }, 60000);
             container._connectTimeout = connectTimeout;
             
             let statusDiv = container.querySelector("#callDuration");
@@ -10367,10 +10368,27 @@ function incomingVideoCall(sessionId, friendId) {
         document.body.appendChild(container);
     }
     activeVideoCallContainer = container;
+    
+    let timeout = setTimeout(() => {
+    if (container && container.parentElement) {
+        container.remove();
+        activeVideoCallContainer = null;
+        
+        // 获取专属昵称（情侣空间）
+        let space = getCoupleSpace(friendId);
+        let displayName = space && space.enabled && space.nickname ? space.nickname : friend.name;
+        
+        sendMessage(sessionId, `${displayName}拨来视频，未应答`, true, null, false);
+        alert(`${displayName}拨来视频，未应答`);
+    }
+}, 60000);
+    container._incomingTimeout = timeout;
+    
     let acceptBtn = container.querySelector("#acceptCallBtn");
     let rejectBtn = container.querySelector("#rejectCallBtn");
     if (acceptBtn) {
         acceptBtn.onclick = () => {
+            clearTimeout(timeout);
             container.remove();
             activeVideoCallContainer = null;
             sendMessage(sessionId, "已接听", false, null, false);
@@ -10380,6 +10398,7 @@ function incomingVideoCall(sessionId, friendId) {
     }
     if (rejectBtn) {
         rejectBtn.onclick = () => {
+            clearTimeout(timeout);
             container.remove();
             activeVideoCallContainer = null;
             sendMessage(sessionId, "已拒绝", false, null, false);
@@ -14682,71 +14701,77 @@ if (isAddWordCardRequest && targetText) {
             
             closeBottomPanel();
         } else if (action === "recall") {
-            closeBottomPanel();
-            
-            if (!isMine) {
-                alert("不能撤回对方的消息");
-                return;
-            }
-            if (isRecalled) {
-                alert("消息已被撤回");
-                return;
-            }
-            
-            let msgTime = 0;
-            if (msg.timestamp) {
-                msgTime = msg.timestamp;
-            } else if (msg.time) {
-                let parsed = new Date(msg.time).getTime();
-                msgTime = isNaN(parsed) ? Date.now() : parsed;
-            } else {
-                msgTime = Date.now();
-            }
-            let now = Date.now();
-            if (now - msgTime > 120000) {
-                alert("消息已发送超过2分钟，不能撤回");
-                return;
-            }
-            
-            let msgs = appData.messages[sessionId] || [];
-            let index = msgs.findIndex(m => m.id === msgId);
-            if (index === -1) {
-                alert("消息不存在");
-                return;
-            }
-            
-            msgs.splice(index, 1);
-            
-            let systemMsg = {
-                id: 'recall_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
-                text: '我撤回了一条消息',
-                time: new Date().toLocaleString(),
-                from: 'system',
-                timestamp: Date.now(),
-                read: true,
-                readByReceiver: true,
-                isPat: false,
-                isSystem: true,
-                isRecall: true
-            };
-            msgs.splice(index, 0, systemMsg);
-            appData.messages[sessionId] = msgs;
-            saveData();
+    closeBottomPanel();
+    
+    if (!isMine) {
+        alert("不能撤回对方的消息");
+        return;
+    }
+    if (isRecalled) {
+        alert("消息已被撤回");
+        return;
+    }
+    
+    let msgTime = 0;
+    if (msg.timestamp) {
+        msgTime = msg.timestamp;
+    } else if (msg.time) {
+        let parsed = new Date(msg.time).getTime();
+        msgTime = isNaN(parsed) ? Date.now() : parsed;
+    } else {
+        msgTime = Date.now();
+    }
+    let now = Date.now();
+    if (now - msgTime > 120000) {
+        alert("消息已发送超过2分钟，不能撤回");
+        return;
+    }
+    
+    let msgs = appData.messages[sessionId] || [];
+    let index = msgs.findIndex(m => m.id === msgId);
+    if (index === -1) {
+        alert("消息不存在");
+        return;
+    }
+    
+    msgs.splice(index, 1);
+    
+    // ✅ 读取自定义撤回文案
+    let friendId = null;
+    if (session && session.type === "friend") {
+        friendId = session.targetId;
+    }
+    let recallSettings = friendId ? getFriendRecallSettings(friendId) : null;
+    let recallText = (recallSettings && recallSettings.recallText) ? recallSettings.recallText : '已撤回';
+    
+    let systemMsg = {
+        id: 'recall_' + Date.now() + '_' + Math.random().toString(36).substr(2, 4),
+        text: recallText,   // ← 使用自定义文案
+        time: new Date().toLocaleString(),
+        from: 'system',
+        timestamp: Date.now(),
+        read: true,
+        readByReceiver: true,
+        isPat: false,
+        isSystem: true,
+        isRecall: true
+    };
+    msgs.splice(index, 0, systemMsg);
+    appData.messages[sessionId] = msgs;
+    saveData();
 
-            if (currentOpenChatWindow && currentOpenSessionId === sessionId) {
-                // ✅ 先清空容器，再重新渲染
-                let container = currentOpenChatWindow.querySelector('.messages-container');
-                if (container) {
-                    container.innerHTML = '';
-                }
-                renderChatMessagesToWindow(currentOpenChatWindow, sessionId);
-            }
-            if (currentPage === "messages") {
-                renderMessagesPage();
-            }
-            alert("✅ 消息已撤回");
-            
-        } else if (action === "delete") {
+    if (currentOpenChatWindow && currentOpenSessionId === sessionId) {
+        let container = currentOpenChatWindow.querySelector('.messages-container');
+        if (container) {
+            container.innerHTML = '';
+        }
+        renderChatMessagesToWindow(currentOpenChatWindow, sessionId);
+    }
+    if (currentPage === "messages") {
+        renderMessagesPage();
+    }
+    alert("✅ 消息已撤回");
+} else if (action === "delete") {
             // 删除消息
             if (confirm("确定删除这条消息吗？")) {
                 let index = msgs.findIndex(m => m.id === msgId);
@@ -17659,12 +17684,264 @@ if (searchInput) {
     renderModal(modal);
 }
 
+// ==================== 日记异步回复调度 ====================
+
+function scheduleDiaryReplies(diaryId) {
+    const diary = appData.diaryEntries.find(d => d.id === diaryId);
+    if (!diary || diary.locked) return;
+    
+    const friends = appData.friends.filter(f => f.id !== "self");
+    if (friends.length === 0) return;
+    
+    const scheduledReplies = {};
+    const now = Date.now();
+    
+    for (const friend of friends) {
+        // 每个好友 0-12 小时随机延迟（毫秒）
+        const delayMs = Math.random() * 12 * 60 * 60 * 1000;
+        const replyText = generateDiaryReplyText(friend.id);
+        scheduledReplies[friend.id] = {
+            text: replyText,
+            delay: delayMs,
+            done: false
+        };
+    }
+    
+    diary.scheduledReplies = scheduledReplies;
+    diary.publishedAt = now;
+    diary.totalOpenTime = 0;
+    diary.lastOpenTime = now;
+    saveData();
+}
+
+// ==================== 添加日记回复 ====================
+
+function addDiaryReply(diaryId, friendId, text) {
+    const diary = appData.diaryEntries.find(d => d.id === diaryId);
+    if (!diary) return;
+    
+    const friend = appData.friends.find(f => f.id === friendId);
+    const friendName = friend ? friend.name : "好友";
+    const now = new Date();
+    const timeStr = now.getFullYear() + "/" + 
+                    String(now.getMonth() + 1).padStart(2, "0") + "/" + 
+                    String(now.getDate()).padStart(2, "0") + " " + 
+                    String(now.getHours()).padStart(2, "0") + ":" + 
+                    String(now.getMinutes()).padStart(2, "0") + ":" + 
+                    String(now.getSeconds()).padStart(2, "0");
+    
+    diary.comments.push({
+        from: friendId,
+        name: friendName,
+        text: text,
+        time: timeStr,
+        isDiaryReply: true
+    });
+    
+    saveData();
+}
+
+// ==================== 检查到期的日记回复 ====================
+
+function checkPendingDiaryReplies() {
+    const now = Date.now();
+    let hasNewReply = false;
+    
+    for (const diary of appData.diaryEntries) {
+        if (diary.locked) continue;
+        if (!diary.scheduledReplies || Object.keys(diary.scheduledReplies).length === 0) continue;
+        
+        // 累加打开时间
+        if (diary.lastOpenTime) {
+            const elapsed = now - diary.lastOpenTime;
+            diary.totalOpenTime = (diary.totalOpenTime || 0) + elapsed;
+            diary.lastOpenTime = now;
+        }
+        
+        for (const friendId in diary.scheduledReplies) {
+            const reply = diary.scheduledReplies[friendId];
+            if (reply.done) continue;
+            
+            // 检查累计打开时间是否达到延迟时间
+            if (diary.totalOpenTime >= reply.delay) {
+                // 触发回复
+                addDiaryReply(diary.id, friendId, reply.text);
+                reply.done = true;
+                hasNewReply = true;
+            }
+        }
+        
+        // 检查评论回复
+        if (diary.commentReplies) {
+            for (const replyId in diary.commentReplies) {
+                const reply = diary.commentReplies[replyId];
+                if (reply.done) continue;
+                
+                if (diary.totalOpenTime >= reply.delay) {
+                    addDiaryReply(diary.id, reply.friendId, reply.text);
+                    reply.done = true;
+                    hasNewReply = true;
+                }
+            }
+        }
+    }
+    
+    if (hasNewReply) {
+        saveData();
+        // 刷新日记列表
+        if (document.querySelector('.modal-mask')) {
+            const modal = document.querySelector('.modal-mask');
+            const container = modal.querySelector('.modal-container');
+            if (container && container.innerHTML.includes('日记')) {
+                modal.remove();
+                openDiaryListModal();
+            }
+        }
+    }
+}
+
+// ==================== 日记计时器管理 ====================
+
+let diaryTimerInterval = null;
+
+function startDiaryTimers() {
+    // 初始化所有日记的 lastOpenTime
+    const now = Date.now();
+    for (const diary of appData.diaryEntries) {
+        if (diary.scheduledReplies && Object.keys(diary.scheduledReplies).length > 0) {
+            diary.lastOpenTime = now;
+        }
+    }
+    saveData();
+    
+    if (diaryTimerInterval) {
+        clearInterval(diaryTimerInterval);
+    }
+    
+    // 每 10 秒检查一次
+    diaryTimerInterval = setInterval(function() {
+        checkPendingDiaryReplies();
+    }, 10000);
+}
+
+function pauseDiaryTimers() {
+    // 保存当前累计时间
+    const now = Date.now();
+    for (const diary of appData.diaryEntries) {
+        if (diary.lastOpenTime) {
+            const elapsed = now - diary.lastOpenTime;
+            diary.totalOpenTime = (diary.totalOpenTime || 0) + elapsed;
+            diary.lastOpenTime = null;
+        }
+    }
+    saveData();
+    
+    if (diaryTimerInterval) {
+        clearInterval(diaryTimerInterval);
+        diaryTimerInterval = null;
+    }
+}
+
+// ==================== 调度好友回复我的评论 ====================
+
+function scheduleDiaryCommentReply(diaryId, commentText) {
+    const diary = appData.diaryEntries.find(d => d.id === diaryId);
+    if (!diary || diary.locked) return;
+    
+    const availableFriends = appData.friends.filter(f => f.id !== "self");
+    if (availableFriends.length === 0) return;
+    
+    // 随机选一个好友回复
+    const randomFriend = availableFriends[Math.floor(Math.random() * availableFriends.length)];
+    
+    // 0-12 小时随机延迟
+    const delayMs = Math.random() * 12 * 60 * 60 * 1000;
+    const replyText = generateDiaryReplyText(randomFriend.id);
+    
+    // 存储到该日记的评论回复调度中
+    if (!diary.commentReplies) {
+        diary.commentReplies = {};
+    }
+    const replyId = Date.now() + "_" + Math.random().toString(36).substr(2, 4);
+    diary.commentReplies[replyId] = {
+        friendId: randomFriend.id,
+        text: replyText,
+        delay: delayMs,
+        done: false,
+        commentText: commentText
+    };
+    saveData();
+}
+
+function generateDiaryReplyText(friendId) {
+    const allItems = [];
+    const includeCategories = ["wordCards", "kaomojis", "emoji", "weather", "status"];
+    
+    // 从公共词条库收集
+    for (const cat of includeCategories) {
+        const groups = appData.lexicon.public[cat] || {};
+        for (const g in groups) {
+            if (Array.isArray(groups[g])) {
+                for (const item of groups[g]) {
+                    if (typeof item === 'string' && !item.startsWith('data:image')) {
+                        allItems.push(item);
+                    }
+                }
+            }
+        }
+    }
+    
+    // 从该好友的私人词条库收集
+    if (friendId) {
+        const priv = getPrivateLexicon(friendId);
+        for (const cat of includeCategories) {
+            const groups = priv[cat] || {};
+            for (const g in groups) {
+                if (Array.isArray(groups[g])) {
+                    for (const item of groups[g]) {
+                        if (typeof item === 'string' && !item.startsWith('data:image')) {
+                            allItems.push(item);
+                        }
+                    }
+                }
+            }
+        }
+    }
+    
+    if (allItems.length === 0) {
+        return "这篇日记写得真好 💕";
+    }
+    
+    const count = Math.floor(Math.random() * 3) + 1;
+    const shuffled = [...allItems];
+    for (let i = shuffled.length - 1; i > 0; i--) {
+        const j = Math.floor(Math.random() * (i + 1));
+        [shuffled[i], shuffled[j]] = [shuffled[j], shuffled[i]];
+    }
+    const selected = shuffled.slice(0, Math.min(count, shuffled.length));
+    return selected.join(" ");
+}
+
 function openDiaryModal() {
     let content = prompt("日记内容");
     if (content) {
-        appData.diaryEntries.push({ date: getTodayDateStr(), content: content, comments: [] });
+        const diaryId = Date.now() + "_" + Math.random().toString(36).substr(2, 4);
+        const diary = {
+            id: diaryId,
+            date: getTodayDateStr(),
+            content: content,
+            comments: [],
+            locked: false,
+            publishedAt: Date.now(),
+            totalOpenTime: 0,
+            lastOpenTime: Date.now(),
+            scheduledReplies: {}
+        };
+        appData.diaryEntries.push(diary);
         saveData();
         alert("日记已保存");
+        // 调度好友回复
+        scheduleDiaryReplies(diaryId);
     }
 }
 
@@ -17699,38 +17976,52 @@ function openDiaryListModal() {
             commentsHtml += `</div>`;
         }
         let formattedContent = formatDiaryContent(diary.content);
-        let html = `
-            <div class="full-page-modal" style="height:100%; display:flex; flex-direction:column; background:var(--app-bg-color);">
-                <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:0.5px solid #e9e9ef;">
-                    <span id="closeDiaryListModal" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
-                    <span style="font-size:15px; font-weight:600;">📖 日记</span>
-                    <span id="backToSettingsFromDiary" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
+        const lockIcon = diary.locked ? '🔒' : '🔓';
+const lockText = diary.locked ? '解锁' : '上锁';
+const lockColor = diary.locked ? '#ff3b30' : '#07c160';
+
+let html = `
+    <div class="full-page-modal" style="height:100%; display:flex; flex-direction:column; background:var(--app-bg-color);">
+        <div style="display:flex; justify-content:space-between; align-items:center; padding:10px; border-bottom:0.5px solid #e9e9ef;">
+            <span id="closeDiaryListModal" style="cursor:pointer; font-size:18px; color:#ff3b30;">✕ 关闭</span>
+            <span style="font-size:15px; font-weight:600;">📖 日记 ${lockIcon}</span>
+            <span id="backToSettingsFromDiary" style="cursor:pointer; font-size:14px; color:#07c160;">← 返回</span>
+        </div>
+        <div style="flex:1; overflow-y:auto; padding:12px;">
+            <div class="diary-directory" style="border-bottom:0.5px solid #e9e9ef; padding:10px; max-height:120px; overflow-y:auto;">
+                <div style="font-size:12px; color:#8e8e93; margin-bottom:4px;">📖 目录</div>
+                ${diaries.map((d, i) => `<div class="diary-directory-item" data-dir-index="${i}">${escapeHtml(d.date)}${d.locked ? ' 🔒' : ''}</div>`).join('')}
+            </div>
+            <div class="diary-content-area" style="flex:6; overflow-y:auto; padding:12px; border-bottom:0.5px solid #e9e9ef;">
+                <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:8px;">
+                    <div class="diary-date">📅 ${escapeHtml(diary.date)} ${diary.locked ? '🔒 已上锁' : '🔓 未上锁'}</div>
+                    <div style="display:flex; gap:6px;">
+                        <button id="toggleLockBtn" style="background:${lockColor}; padding:4px 12px; font-size:11px; border-radius:14px; border:none; color:white; cursor:pointer;">${lockText}</button>
+                        <button id="deleteDiaryBtn" style="background:#ff3b30; padding:4px 12px; font-size:11px; border-radius:14px; border:none; color:white; cursor:pointer;">🗑️ 删除</button>
+                    </div>
                 </div>
-                <div style="flex:1; overflow-y:auto; padding:12px;">
-                    <div class="diary-directory" style="border-bottom:0.5px solid #e9e9ef; padding:10px; max-height:120px; overflow-y:auto;">
-                        <div style="font-size:12px; color:#8e8e93; margin-bottom:4px;">📖 目录</div>
-                        ${diaries.map((d, i) => `<div class="diary-directory-item" data-dir-index="${i}">${escapeHtml(d.date)}</div>`).join('')}
-                    </div>
-                    <div class="diary-content-area" style="flex:6; overflow-y:auto; padding:12px; border-bottom:0.5px solid #e9e9ef;">
-                        <div class="diary-date">📅 ${escapeHtml(diary.date)}</div>
-                        <div class="diary-text" contenteditable="true" id="editableDiary">${formattedContent}</div>
-                        <button id="saveDiaryBtn" style="margin-top:8px;">保存修改</button>
-                    </div>
-                    <div class="diary-comments-area" style="flex:4; overflow-y:auto; padding:12px;">
-                        <div style="font-weight:500; margin-bottom:8px;">💬 评论</div>
-                        ${commentsHtml}
-                        <div class="flex-between" style="margin-top:8px;">
-                            <input type="text" class="diaryCommentInput" placeholder="写评论..." style="flex:1; padding:6px; border-radius:16px; border:0.5px solid #ccc;">
-                            <button class="diaryCommentBtn" data-idx="${index}">评论</button>
-                        </div>
-                        <div class="diary-nav">
-                            <button id="prevDiaryBtn" ${index === 0 ? 'disabled' : ''}>← 上一篇</button>
-                            <button id="nextDiaryBtn" ${index === diaries.length-1 ? 'disabled' : ''}>下一篇 →</button>
-                        </div>
-                    </div>
+                <div class="diary-text" contenteditable="true" id="editableDiary">${formattedContent}</div>
+                <button id="saveDiaryBtn" style="margin-top:8px;">保存修改</button>
+            </div>
+            <div class="diary-comments-area" style="flex:4; overflow-y:auto; padding:12px;">
+                <div style="font-weight:500; margin-bottom:8px;">💬 评论 ${diary.locked ? '🔒 已锁定，无法评论' : ''}</div>
+                ${commentsHtml}
+                ${!diary.locked ? `
+                <div class="flex-between" style="margin-top:8px;">
+                    <input type="text" class="diaryCommentInput" placeholder="写评论..." style="flex:1; padding:6px; border-radius:16px; border:0.5px solid #ccc;">
+                    <button class="diaryCommentBtn" data-idx="${index}">评论</button>
+                </div>
+                ` : `
+                <div style="text-align:center; padding:12px; color:#8e8e93; font-size:12px;">🔒 日记已上锁，无法评论</div>
+                `}
+                <div class="diary-nav">
+                    <button id="prevDiaryBtn" ${index === 0 ? 'disabled' : ''}>← 上一篇</button>
+                    <button id="nextDiaryBtn" ${index === diaries.length-1 ? 'disabled' : ''}>下一篇 →</button>
                 </div>
             </div>
-        `;
+        </div>
+    </div>
+`;
         let modal = showModal(html, true);
         let container = modal.querySelector(".modal-container");
         if (container) container.classList.add("full-page-modal");
@@ -17782,31 +18073,87 @@ function openDiaryListModal() {
         }
         
         let saveBtn = modal.querySelector("#saveDiaryBtn");
-        if (saveBtn) {
-            saveBtn.addEventListener("click", () => {
-                let newContent = modal.querySelector("#editableDiary").innerHTML;
-                diary.content = newContent;
+if (saveBtn) {
+    saveBtn.addEventListener("click", () => {
+        let newContent = modal.querySelector("#editableDiary").innerHTML;
+        diary.content = newContent;
+        saveData();
+        alert("已保存");
+    });
+}
+
+// ===== 上锁/解锁按钮 =====
+let toggleLockBtn = modal.querySelector("#toggleLockBtn");
+if (toggleLockBtn) {
+    toggleLockBtn.addEventListener("click", () => {
+        diary.locked = !diary.locked;
+        saveData();
+        modal.remove();
+        renderDiary(index);
+        // 如果解锁了，检查是否有到期的回复
+        if (!diary.locked) {
+            checkPendingDiaryReplies();
+        }
+    });
+}
+
+// ===== 删除日记按钮 =====
+let deleteDiaryBtn = modal.querySelector("#deleteDiaryBtn");
+if (deleteDiaryBtn) {
+    deleteDiaryBtn.addEventListener("click", () => {
+        if (confirm("确定要删除这篇日记吗？此操作不可撤销！")) {
+            // 用 id 精确查找删除
+            const diaryIndex = appData.diaryEntries.findIndex(d => d.id === diary.id);
+            if (diaryIndex !== -1) {
+                appData.diaryEntries.splice(diaryIndex, 1);
                 saveData();
-                alert("已保存");
-            });
-        }
-        
-        let commentBtn = modal.querySelector(".diaryCommentBtn");
-        if (commentBtn) {
-            commentBtn.addEventListener("click", () => {
-                let input = modal.querySelector(".diaryCommentInput");
-                let commentText = input.value.trim();
-                if (commentText) {
-                    if (!diary.comments) diary.comments = [];
-                    diary.comments.push({ from: "self", text: commentText, time: new Date().toLocaleString() });
-                    saveData();
-                    modal.remove();
-                    renderDiary(index);
+                modal.remove();
+                if (appData.diaryEntries.length > 0) {
+                    openDiaryListModal();
                 } else {
-                    alert("请输入评论内容");
+                    alert("日记已删除，暂无其他日记");
                 }
-            });
+            } else {
+                alert("日记不存在或已被删除");
+            }
         }
+    });
+}
+
+let commentBtn = modal.querySelector(".diaryCommentBtn");
+if (commentBtn) {
+    commentBtn.addEventListener("click", () => {
+        if (diary.locked) {
+            alert("🔒 日记已上锁，无法评论");
+            return;
+        }
+        let input = modal.querySelector(".diaryCommentInput");
+        let commentText = input.value.trim();
+        if (commentText) {
+            if (!diary.comments) diary.comments = [];
+            const now = new Date();
+            const timeStr = now.getFullYear() + "/" + 
+                            String(now.getMonth() + 1).padStart(2, "0") + "/" + 
+                            String(now.getDate()).padStart(2, "0") + " " + 
+                            String(now.getHours()).padStart(2, "0") + ":" + 
+                            String(now.getMinutes()).padStart(2, "0") + ":" + 
+                            String(now.getSeconds()).padStart(2, "0");
+            diary.comments.push({ 
+                from: "self", 
+                name: "我", 
+                text: commentText, 
+                time: timeStr 
+            });
+            saveData();
+            modal.remove();
+            renderDiary(index);
+            // 调度好友回复我的评论（0-12小时异步）
+            scheduleDiaryCommentReply(diary.id, commentText);
+        } else {
+            alert("请输入评论内容");
+        }
+    });
+}
         
         // 长按评论回复
         let commentDivs = modal.querySelectorAll(".moment-comment");
@@ -18231,6 +18578,14 @@ function init() {
     setInterval(function() {
         autoCleanOldMessages();
     }, 60 * 60 * 1000);
+    
+        // ===== 启动日记计时器 =====
+    startDiaryTimers();
+    
+    // ===== 页面关闭时暂停日记计时器 =====
+    window.addEventListener("beforeunload", function() {
+        pauseDiaryTimers();
+    });
 }
 
 function showQuestionBankModal(sessionId, friendId) {
